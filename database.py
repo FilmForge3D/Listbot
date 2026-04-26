@@ -3,6 +3,7 @@
 
 import sqlite3
 import logging
+import random
 from pathlib import Path
 
 logger = logging.getLogger(__name__)
@@ -32,16 +33,21 @@ def init_db() -> None:
         """)
         conn.execute("""
             CREATE TABLE IF NOT EXISTS prompts (
-                id         INTEGER PRIMARY KEY AUTOINCREMENT,
-                list_id    INTEGER NOT NULL REFERENCES lists(id) ON DELETE CASCADE,
-                position   INTEGER NOT NULL,
-                text       TEXT    NOT NULL,
-                drawn      INTEGER NOT NULL DEFAULT 0,
-                drawn_at   TEXT,
-                added_at   TEXT    NOT NULL DEFAULT (datetime('now')),
+                id            INTEGER PRIMARY KEY AUTOINCREMENT,
+                list_id       INTEGER NOT NULL REFERENCES lists(id) ON DELETE CASCADE,
+                position      INTEGER NOT NULL,
+                text          TEXT    NOT NULL,
+                drawn         INTEGER NOT NULL DEFAULT 0,
+                drawn_at      TEXT,
+                added_by_name TEXT,
+                added_at      TEXT    NOT NULL DEFAULT (datetime('now')),
                 UNIQUE (list_id, position)
             )
         """)
+        try:
+            conn.execute("ALTER TABLE prompts ADD COLUMN added_by_name TEXT")
+        except Exception:
+            pass
         conn.commit()
     logger.info("Database initialised at %s", DB_PATH)
 
@@ -71,7 +77,7 @@ def get_list_names(chat_id: int) -> list[str]:
         return [row["list_name"] for row in rows]
 
 
-def add_prompt(chat_id: int, list_name: str, text: str) -> int:
+def add_prompt(chat_id: int, list_name: str, text: str, added_by_name: str = "") -> int:
     """Append a prompt to a list. Returns the new prompt id."""
     with get_connection() as conn:
         list_id = _get_or_create_list(conn, chat_id, list_name)
@@ -80,8 +86,8 @@ def add_prompt(chat_id: int, list_name: str, text: str) -> int:
             (list_id,),
         ).fetchone()[0]
         cur = conn.execute(
-            "INSERT INTO prompts (list_id, position, text) VALUES (?, ?, ?)",
-            (list_id, max_pos + 1, text),
+            "INSERT INTO prompts (list_id, position, text, added_by_name) VALUES (?, ?, ?, ?)",
+            (list_id, max_pos + 1, text, added_by_name or None),
         )
         conn.commit()
         return cur.lastrowid
@@ -99,7 +105,10 @@ def get_prompts(chat_id: int, list_name: str) -> list[sqlite3.Row]:
 
 
 def draw_random_prompt(chat_id: int, list_name: str) -> sqlite3.Row | None:
-    """Pick a random undrawn prompt, mark it drawn, and return it. Returns None if all drawn."""
+    """Pick a weighted-random prompt and increment its draw count. Returns None if list is empty.
+
+    Weight = 1 / (draw_count + 1), so each draw lowers the probability of being picked again.
+    """
     with get_connection() as conn:
         row = conn.execute(
             "SELECT id FROM lists WHERE chat_id = ? AND list_name = ?",
@@ -108,18 +117,57 @@ def draw_random_prompt(chat_id: int, list_name: str) -> sqlite3.Row | None:
         if not row:
             return None
         list_id = row["id"]
-        prompt = conn.execute(
-            "SELECT * FROM prompts WHERE list_id = ? AND drawn = 0 ORDER BY RANDOM() LIMIT 1",
+        prompts = conn.execute(
+            "SELECT * FROM prompts WHERE list_id = ? ORDER BY position",
             (list_id,),
-        ).fetchone()
-        if not prompt:
+        ).fetchall()
+        if not prompts:
             return None
+        weights = [1.0 / (p["drawn"] + 1) for p in prompts]
+        prompt = random.choices(prompts, weights=weights, k=1)[0]
         conn.execute(
-            "UPDATE prompts SET drawn = 1, drawn_at = datetime('now') WHERE id = ?",
+            "UPDATE prompts SET drawn = drawn + 1, drawn_at = datetime('now') WHERE id = ?",
             (prompt["id"],),
         )
         conn.commit()
         return prompt
+
+
+def get_stats(chat_id: int, list_name: str) -> dict | None:
+    """Return statistics for a list, or None if the list does not exist."""
+    with get_connection() as conn:
+        row = conn.execute(
+            "SELECT id FROM lists WHERE chat_id = ? AND list_name = ?",
+            (chat_id, list_name),
+        ).fetchone()
+        if not row:
+            return None
+        list_id = row["id"]
+        total = conn.execute(
+            "SELECT COUNT(*) FROM prompts WHERE list_id = ?", (list_id,)
+        ).fetchone()[0]
+        total_draws = conn.execute(
+            "SELECT COALESCE(SUM(drawn), 0) FROM prompts WHERE list_id = ?", (list_id,)
+        ).fetchone()[0]
+        never_drawn = conn.execute(
+            "SELECT COUNT(*) FROM prompts WHERE list_id = ? AND drawn = 0", (list_id,)
+        ).fetchone()[0]
+        most_drawn = conn.execute(
+            "SELECT text, drawn FROM prompts WHERE list_id = ? ORDER BY drawn DESC LIMIT 1",
+            (list_id,),
+        ).fetchone()
+        by_user = conn.execute(
+            "SELECT COALESCE(added_by_name, 'Unknown') AS name, COUNT(*) AS cnt"
+            " FROM prompts WHERE list_id = ? GROUP BY added_by_name ORDER BY cnt DESC",
+            (list_id,),
+        ).fetchall()
+        return {
+            "total": total,
+            "total_draws": total_draws,
+            "never_drawn": never_drawn,
+            "most_drawn": {"text": most_drawn["text"], "count": most_drawn["drawn"]} if most_drawn else None,
+            "by_user": [{"name": r["name"], "count": r["cnt"]} for r in by_user],
+        }
 
 
 def remove_prompt(chat_id: int, list_name: str, position: int) -> bool:

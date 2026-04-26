@@ -188,6 +188,9 @@ python "Nachricht extrahieren/extract_telegram.py" input.json --bot-name "MyBot"
 
 ⚠️ **Critical constraints for all future work:**
 
+### Bot Behavior Rules
+- **Single notification per action**: Any message sent by the bot must result in at most one notification to other chat users. Do not send multiple messages where one would suffice; consolidate all output into a single reply.
+
 ### Off-Limits
 - **ListBot.old.py**: Do NOT edit. This is archived legacy code preserved for reference and migration purposes only.
 

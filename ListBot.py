@@ -6,7 +6,7 @@ import sys
 from pathlib import Path
 from telegram.ext import Application, CommandHandler, CallbackQueryHandler, MessageHandler, filters, ContextTypes
 from telegram import Update, InlineKeyboardButton, InlineKeyboardMarkup, ForceReply
-from database import init_db, get_list_names, get_prompts, draw_random_prompt, add_prompt
+from database import init_db, get_list_names, get_prompts, draw_random_prompt, add_prompt, get_stats
 
 # Enable logging
 logging.basicConfig(
@@ -58,8 +58,9 @@ def _render_list_view(chat_id: int, list_name: str, note: str = "") -> tuple[str
         [InlineKeyboardButton("🎲 Draw", callback_data=f"draw:{list_name}"),
          InlineKeyboardButton("➕ Add", callback_data=f"add:{list_name}")],
         [InlineKeyboardButton("🗑 Remove", callback_data=f"remove:{list_name}"),
-         InlineKeyboardButton("📋 View", callback_data=f"list:{list_name}")],
-        [InlineKeyboardButton("← Back", callback_data="back")],
+         InlineKeyboardButton("📋 View", callback_data=f"list:{list_name}:0")],
+        [InlineKeyboardButton("📊 Stats", callback_data=f"stats:{list_name}"),
+         InlineKeyboardButton("← Back", callback_data="back")],
     ])
     return text, markup
 
@@ -83,20 +84,60 @@ async def button_handler(update: Update, context: ContextTypes.DEFAULT_TYPE) -> 
 
     elif data.startswith("draw:"):
         list_name = data[5:]
+        user_name = query.from_user.full_name if query.from_user else "Someone"
         prompt = draw_random_prompt(chat_id, list_name)
-        note = f"🎲 Drew: _{prompt['text']}_" if prompt else "⚠️ All items have been drawn."
+        if prompt:
+            note = f"🎲 Drew: _{prompt['text']}_"
+            await query.message.reply_text(
+                f"🎲 *{user_name}* drew from *{list_name}*:\n_{prompt['text']}_",
+                parse_mode="Markdown",
+            )
+        else:
+            note = "⚠️ All items have been drawn."
         text, markup = _render_list_view(chat_id, list_name, note)
         await query.edit_message_text(text, reply_markup=markup, parse_mode="Markdown")
 
     elif data.startswith("list:"):
-        list_name = data[5:]
+        parts = data[5:].rsplit(":", 1)
+        list_name = parts[0]
+        page = int(parts[1]) if len(parts) > 1 and parts[1].lstrip("-").isdigit() else 0
+        PAGE_SIZE = 50
         prompts = get_prompts(chat_id, list_name)
-        lines = "\n".join(f"{p['position']}. {p['text']}" for p in prompts) or "_Empty_"
         total = len(prompts)
         drawn = sum(1 for p in prompts if p["drawn"])
-        text = f"*{list_name}*  ({total} items, {drawn} drawn)\n\n{lines}"
-        _, markup = _render_list_view(chat_id, list_name)
+        start = page * PAGE_SIZE
+        page_prompts = prompts[start:start + PAGE_SIZE]
+        lines = "\n".join(f"{p['position']}. {p['text']}" for p in page_prompts) or "_Empty_"
+        total_pages = max(1, (total + PAGE_SIZE - 1) // PAGE_SIZE)
+        header = f"*{list_name}*  ({total} items, {drawn} drawn) — page {page + 1}/{total_pages}"
+        text = f"{header}\n\n{lines}"
+        _, base_markup = _render_list_view(chat_id, list_name)
+        nav_row = []
+        if page > 0:
+            nav_row.append(InlineKeyboardButton("◀ Prev", callback_data=f"list:{list_name}:{page - 1}"))
+        if start + PAGE_SIZE < total:
+            nav_row.append(InlineKeyboardButton("Next ▶", callback_data=f"list:{list_name}:{page + 1}"))
+        markup = InlineKeyboardMarkup(list(base_markup.inline_keyboard) + [nav_row]) if nav_row else base_markup
         await query.edit_message_text(text, reply_markup=markup, parse_mode="Markdown")
+
+    elif data.startswith("stats:"):
+        list_name = data[6:]
+        s = get_stats(chat_id, list_name)
+        if not s:
+            await query.answer("List not found.", show_alert=True)
+            return
+        user_lines = "\n".join(f"  • {r['name']} — {r['count']}" for r in s["by_user"])
+        most = f'_{s["most_drawn"]["text"]}_ ({s["most_drawn"]["count"]}×)' if s["most_drawn"] else "—"
+        stats_text = (
+            f"*{list_name} — Stats*\n\n"
+            f"📝 Prompts: {s['total']}\n"
+            f"🎲 Total draws: {s['total_draws']}\n"
+            f"😴 Never drawn: {s['never_drawn']}\n"
+            f"🏆 Most drawn: {most}\n\n"
+            f"👤 Prompts by user:\n{user_lines or '  —'}"
+        )
+        _, markup = _render_list_view(chat_id, list_name)
+        await query.edit_message_text(stats_text, reply_markup=markup, parse_mode="Markdown")
 
     elif data.startswith("add:"):
         list_name = data[4:]
@@ -137,20 +178,24 @@ async def reply_handler(update: Update, context: ContextTypes.DEFAULT_TYPE) -> N
 
     if state["action"] == "add":
         list_name = state["list_name"]
-        add_prompt(chat_id, list_name, user_text)
-        note = f"✅ Added: _{user_text}_"
-        text, markup = _render_list_view(chat_id, list_name, note)
+        user_name = msg.from_user.full_name if msg.from_user else ""
+        add_prompt(chat_id, list_name, user_text, added_by_name=user_name)
+        await context.bot.delete_message(chat_id, msg.reply_to_message.message_id)
+        await context.bot.delete_message(chat_id, msg.message_id)
+        await context.bot.send_message(
+            chat_id,
+            f"✅ *{user_name}* added to *{list_name}*:\n_{user_text}_",
+            parse_mode="Markdown",
+        )
+        text, markup = _render_list_view(chat_id, list_name)
+        await context.bot.edit_message_text(text, chat_id=chat_id, message_id=panel_msg_id, reply_markup=markup, parse_mode="Markdown")
 
     elif state["action"] == "new_list":
         list_name = user_text
         text, markup = _render_list_view(chat_id, list_name, "✅ List created! Tap ➕ Add to start filling it.")
-
-    await context.bot.delete_message(chat_id, msg.reply_to_message.message_id)
-    await context.bot.delete_message(chat_id, msg.message_id)
-    await context.bot.edit_message_text(
-        text, chat_id=chat_id, message_id=panel_msg_id,
-        reply_markup=markup, parse_mode="Markdown",
-    )
+        await context.bot.delete_message(chat_id, msg.reply_to_message.message_id)
+        await context.bot.delete_message(chat_id, msg.message_id)
+        await context.bot.edit_message_text(text, chat_id=chat_id, message_id=panel_msg_id, reply_markup=markup, parse_mode="Markdown")
 
 
 async def show_panel(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
