@@ -191,10 +191,15 @@ python "Nachricht extrahieren/extract_telegram.py" input.json --bot-name "MyBot"
 ### Off-Limits
 - **ListBot.old.py**: Do NOT edit. This is archived legacy code preserved for reference and migration purposes only.
 
+### Confirmation Required
+- **Creating new files**: Always ask the user before creating a new file. Describe what the file will contain and why it is needed.
+- **Large changes**: Any change exceeding ~30 net new lines requires explicit user approval before writing.
+
 ### New Functions
-- **Size limit**: Maximum 200 lines per function
+- **Size limit**: Maximum 100 lines per new function
 - **Testability**: All new functions must be independently testable
 - **One at a time**: Implement only one new function per session/commit
+- **Module split**: When a concern is large enough to stand alone (e.g., database, config, utilities), split it into its own module rather than growing a single file. Ask before doing so.
 
 ### Code Edits
 - **Change limit**: Maximum 50 lines of continued code per edit (including unchanged context for readability)
