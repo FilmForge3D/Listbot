@@ -90,6 +90,123 @@ def _extract_position(text: str) -> int | None:
     return None
 
 
+def _parse_list_number(cmd: str) -> int:
+    """Returns 1, 2, or 3 from a command like /add2, /grupp3, /edit."""
+    cmd = cmd.lstrip("/").split("@")[0]
+    if cmd.endswith("2"):
+        return 2
+    if cmd.endswith("3"):
+        return 3
+    return 1
+
+
+def _parse_add_prompt(text: str) -> tuple[str | None, int]:
+    """Extracts (prompt, list_number) from a /add or /grupp slash command text."""
+    parts = text.split(None, 1)
+    if len(parts) < 2:
+        return None, 1
+    return parts[1].strip(), _parse_list_number(parts[0])
+
+
+_LISTBOT_ENTRY_PATTERNS: list[tuple[re.Pattern, int | None, int]] = [
+    (re.compile(r"^(\w+)\s+hat\s+'(.+?)'\s+als\s+\d+\.\s+gegruppt", re.IGNORECASE), 1, 2),
+    (re.compile(r"^(\w+)\s+successfully added '(.+?)'\s+in position", re.IGNORECASE), 1, 2),
+    (re.compile(r"^Successfully added '(.+?)'\s+in position", re.IGNORECASE), None, 1),
+    (re.compile(r"^Successfully added '(.+?)' to the list", re.IGNORECASE), None, 1),
+    (re.compile(r"^✅ (\w+) added \d+: '(.+?)'"), 1, 2),
+    (re.compile(r"^(\w+)\s+successfully changed position \d+ from '.+?' into '(.+?)'", re.IGNORECASE), 1, 2),
+    (re.compile(r"^✅ (\w+) changed \d+ from '.+?' to '(.+?)'"), 1, 2),
+]
+
+
+def _parse_listbot_entry(text: str) -> tuple[str | None, str | None]:
+    """Returns (first_name, prompt) extracted from a listbot added/gruppt/edited message."""
+    for pattern, name_group, prompt_group in _LISTBOT_ENTRY_PATTERNS:
+        m = pattern.search(text)
+        if m:
+            name = m.group(name_group) if name_group else None
+            return name, m.group(prompt_group)
+    return None, None
+
+
+def _is_draw_result(text: str) -> bool:
+    """Returns True if the drew message is an actual draw, not a /list output.
+
+    /list outputs have sequentially numbered lines (1,2,3… or 5,6,7…).
+    Draw results are single-line or have non-sequential numbering.
+    """
+    lines = [l for l in text.strip().split("\n") if l.strip()]
+    if len(lines) <= 1:
+        return True
+    numbers = []
+    for line in lines:
+        m = re.match(r"^(\d+):", line)
+        if not m:
+            return True
+        numbers.append(int(m.group(1)))
+    return any(numbers[i + 1] != numbers[i] + 1 for i in range(len(numbers) - 1))
+
+
+def _extract_drew_prompts(text: str) -> list[str]:
+    """Extracts prompt texts from the numbered lines of a draw result message."""
+    prompts = []
+    for line in text.strip().split("\n"):
+        m = re.match(r"^\d+:\s*(.+)", line.strip())
+        if m:
+            prompts.append(m.group(1).strip())
+    return prompts
+
+
+_ADD_CMD_BASES = {"add", "grupp"}
+
+
+def normalize_prompts(result: dict) -> dict:
+    """Transforms raw extracted data into a single normalized prompts list."""
+    draw_counts: dict[str, int] = {}
+    for msg in result["listbot"]:
+        if msg["match_type"] == "drew" and _is_draw_result(msg["text"]):
+            for p in _extract_drew_prompts(msg["text"]):
+                key = p.strip().lower()
+                draw_counts[key] = draw_counts.get(key, 0) + 1
+
+    prompts = []
+    for msg in result["slash_commands"]:
+        cmd_base = msg["text"].split()[0].lstrip("/").split("@")[0].rstrip("23")
+        if cmd_base not in _ADD_CMD_BASES:
+            continue
+        prompt, list_number = _parse_add_prompt(msg["text"])
+        if not prompt:
+            continue
+        prompts.append({
+            "date": msg["date"],
+            "first_name": msg["from"].split()[0],
+            "prompt": prompt,
+            "list_number": list_number,
+            "draw_count": draw_counts.get(prompt.strip().lower(), 0),
+        })
+
+    for msg in result["listbot"]:
+        if msg["match_type"] not in {"added", "gruppt", "edited"}:
+            continue
+        first_name, prompt = _parse_listbot_entry(msg["text"])
+        if not prompt:
+            continue
+        prompts.append({
+            "date": msg["date"],
+            "first_name": first_name or "unknown",
+            "prompt": prompt,
+            "list_number": 1,
+            "draw_count": draw_counts.get(prompt.strip().lower(), 0),
+        })
+
+    prompts.sort(key=lambda x: x["date"])
+    return {
+        "chat_id": result["chat_id"],
+        "chat_name": result["chat_name"],
+        "prompts": prompts,
+    }
+
+
 def extract_messages(input_path: Path, bot_name: str = "ListBot") -> dict:
     data = load_json_tolerant(input_path)
 
@@ -200,6 +317,7 @@ def main():
         raise SystemExit(1)
 
     result = extract_messages(input_path, bot_name=args.bot_name)
+    normalized = normalize_prompts(result)
 
     if not args.quiet:
         print_section(f"Nachrichten von {args.bot_name}", result["listbot"])
@@ -211,11 +329,12 @@ def main():
     print(f"  Chat                       : {result['chat_name']} (ID {result['chat_id']})")
     print(f"  {args.bot_name}-Nachrichten : {len(result['listbot'])}")
     print(f"  /-Nachrichten              : {len(result['slash_commands'])}")
+    print(f"  Prompts (normalisiert)       : {len(normalized['prompts'])}")
 
     if args.output_json:
         out = Path(args.output_json)
         with open(out, "w", encoding="utf-8") as f:
-            json.dump(result, f, ensure_ascii=False, indent=2)
+            json.dump(normalized, f, ensure_ascii=False, indent=2)
         print(f"\n  Gespeichert als: {out}")
 
 
