@@ -85,6 +85,60 @@ def _force_reply_msg(user, body: str, bold: str, suffix: str) -> tuple[str, list
     ]
 
 
+_NO_DEFAULT_LIST_MSG = "No default list set. Open /lb, pick a list, and tap ⭐ Default."
+
+
+async def _send_force_reply(
+    context: ContextTypes.DEFAULT_TYPE,
+    chat_id: int,
+    thread_id: int | None,
+    panel_msg_id: int,
+    user,
+    action: str,
+    body: str,
+    bold: str,
+    suffix: str,
+    list_name: str | None = None,
+) -> None:
+    """Send a ForceReply prompt and record the pending action in chat_data."""
+    msg_text, entities = _force_reply_msg(user, body, bold, suffix)
+    prompt_msg = await context.bot.send_message(
+        chat_id, msg_text,
+        reply_markup=ForceReply(selective=True),
+        entities=entities,
+        message_thread_id=thread_id,
+    )
+    state: dict = {
+        "action": action,
+        "panel_msg_id": panel_msg_id,
+        "prompt_msg_id": prompt_msg.message_id,
+    }
+    if list_name is not None:
+        state["list_name"] = list_name
+    context.chat_data[f"user:{user.id}"] = state
+
+
+async def _cleanup_reply_messages(bot, chat_id: int, prompt_msg_id: int, user_msg_id: int) -> None:
+    """Delete the ForceReply prompt and the user's reply from chat."""
+    await bot.delete_message(chat_id, prompt_msg_id)
+    await bot.delete_message(chat_id, user_msg_id)
+
+
+async def _do_draw(bot, chat_id: int, list_name: str, user_name: str, thread_id: int | None) -> bool:
+    """Draw a random undrawn prompt and notify the chat. Returns False if list is empty."""
+    prompt = draw_random_prompt(chat_id, list_name)
+    if not prompt:
+        return False
+    added_by = prompt["added_by_name"] or ""
+    author_line = f"\n<i>added by <tg-spoiler>{added_by}</tg-spoiler></i>" if added_by else ""
+    await _notify(
+        bot, chat_id,
+        f"🎲 <b>{user_name}</b> drew from <b>{list_name}</b>:\n<blockquote>{prompt['text']}</blockquote>{author_line}",
+        thread_id,
+    )
+    return True
+
+
 async def button_handler(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
     """Route inline keyboard button taps."""
     query = update.callback_query
@@ -105,19 +159,11 @@ async def button_handler(update: Update, context: ContextTypes.DEFAULT_TYPE) -> 
     elif data.startswith("draw:"):
         list_name = data[5:]
         user_name = query.from_user.full_name if query.from_user else "Someone"
-        prompt = draw_random_prompt(chat_id, list_name)
-        if not prompt:
+        if not await _do_draw(context.bot, chat_id, list_name, user_name, query.message.message_thread_id):
             text, markup = _render_list_view(chat_id, list_name, "⚠️ All items have been drawn.")
             await query.edit_message_text(text, reply_markup=markup, parse_mode="Markdown")
             return
-        added_by = prompt["added_by_name"] or ""
-        author_line = f"\n<i>added by <tg-spoiler>{added_by}</tg-spoiler></i>" if added_by else ""
         await query.message.delete()
-        await _notify(
-            context.bot, chat_id,
-            f"🎲 <b>{user_name}</b> drew from <b>{list_name}</b>:\n<blockquote>{prompt['text']}</blockquote>{author_line}",
-            query.message.message_thread_id,
-        )
 
     elif data.startswith("list:"):
         parts = data[5:].rsplit(":", 1)
@@ -167,54 +213,27 @@ async def button_handler(update: Update, context: ContextTypes.DEFAULT_TYPE) -> 
 
     elif data.startswith("remove:"):
         list_name = data[7:]
-        user = query.from_user
-        msg_text, entities = _force_reply_msg(user, "reply with the position number to remove from ", list_name, ":")
-        prompt_msg = await context.bot.send_message(
-            chat_id, msg_text,
-            reply_markup=ForceReply(selective=True),
-            entities=entities,
-            message_thread_id=query.message.message_thread_id,
+        await _send_force_reply(
+            context, chat_id, query.message.message_thread_id, query.message.message_id,
+            query.from_user, "remove", "reply with the position number to remove from ", list_name, ":",
+            list_name=list_name,
         )
-        context.chat_data[f"user:{user.id}"] = {
-            "action": "remove",
-            "list_name": list_name,
-            "panel_msg_id": query.message.message_id,
-            "prompt_msg_id": prompt_msg.message_id,
-        }
 
     elif data.startswith("edit:"):
         list_name = data[5:]
-        user = query.from_user
-        msg_text, entities = _force_reply_msg(user, "reply with `position new text` to edit an item in ", list_name, ":")
-        prompt_msg = await context.bot.send_message(
-            chat_id, msg_text,
-            reply_markup=ForceReply(selective=True),
-            entities=entities,
-            message_thread_id=query.message.message_thread_id,
+        await _send_force_reply(
+            context, chat_id, query.message.message_thread_id, query.message.message_id,
+            query.from_user, "edit", "reply with `position new text` to edit an item in ", list_name, ":",
+            list_name=list_name,
         )
-        context.chat_data[f"user:{user.id}"] = {
-            "action": "edit",
-            "list_name": list_name,
-            "panel_msg_id": query.message.message_id,
-            "prompt_msg_id": prompt_msg.message_id,
-        }
 
     elif data.startswith("add:"):
         list_name = data[4:]
-        user = query.from_user
-        msg_text, entities = _force_reply_msg(user, "reply with the item to add to ", list_name, ":")
-        prompt_msg = await context.bot.send_message(
-            chat_id, msg_text,
-            reply_markup=ForceReply(selective=True),
-            entities=entities,
-            message_thread_id=query.message.message_thread_id,
+        await _send_force_reply(
+            context, chat_id, query.message.message_thread_id, query.message.message_id,
+            query.from_user, "add", "reply with the item to add to ", list_name, ":",
+            list_name=list_name,
         )
-        context.chat_data[f"user:{user.id}"] = {
-            "action": "add",
-            "list_name": list_name,
-            "panel_msg_id": query.message.message_id,
-            "prompt_msg_id": prompt_msg.message_id,
-        }
 
     elif data.startswith("set_default:"):
         list_name = data[12:]
@@ -223,19 +242,10 @@ async def button_handler(update: Update, context: ContextTypes.DEFAULT_TYPE) -> 
         await query.edit_message_text(text, reply_markup=markup, parse_mode="Markdown")
 
     elif data == "new_list":
-        user = query.from_user
-        msg_text, entities = _force_reply_msg(user, "reply with the name for the new list", "", ":")
-        prompt_msg = await context.bot.send_message(
-            chat_id, msg_text,
-            reply_markup=ForceReply(selective=True),
-            entities=entities,
-            message_thread_id=query.message.message_thread_id,
+        await _send_force_reply(
+            context, chat_id, query.message.message_thread_id, query.message.message_id,
+            query.from_user, "new_list", "reply with the name for the new list", "", ":",
         )
-        context.chat_data[f"user:{user.id}"] = {
-            "action": "new_list",
-            "panel_msg_id": query.message.message_id,
-            "prompt_msg_id": prompt_msg.message_id,
-        }
 
 
 async def reply_handler(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
@@ -256,8 +266,7 @@ async def reply_handler(update: Update, context: ContextTypes.DEFAULT_TYPE) -> N
         list_name = state["list_name"]
         user_name = msg.from_user.full_name if msg.from_user else ""
         position = add_prompt(chat_id, list_name, user_text, added_by_name=user_name)
-        await context.bot.delete_message(chat_id, prompt_msg_id)
-        await context.bot.delete_message(chat_id, msg.message_id)
+        await _cleanup_reply_messages(context.bot, chat_id, prompt_msg_id, msg.message_id)
         await _notify(
             context.bot, chat_id,
             f"✅ <b>{user_name}</b> <i>added #{position} to {list_name}</i>:\n<blockquote>{user_text}</blockquote>",
@@ -268,15 +277,13 @@ async def reply_handler(update: Update, context: ContextTypes.DEFAULT_TYPE) -> N
     elif state["action"] == "remove":
         list_name = state["list_name"]
         if not user_text.isdigit():
-            await context.bot.delete_message(chat_id, prompt_msg_id)
-            await context.bot.delete_message(chat_id, msg.message_id)
+            await _cleanup_reply_messages(context.bot, chat_id, prompt_msg_id, msg.message_id)
             text, markup = _render_list_view(chat_id, list_name, "⚠️ Please reply with a position number.")
             await context.bot.edit_message_text(text, chat_id=chat_id, message_id=panel_msg_id, reply_markup=markup, parse_mode="Markdown")
             return
         position = int(user_text)
         removed = remove_prompt(chat_id, list_name, position)
-        await context.bot.delete_message(chat_id, prompt_msg_id)
-        await context.bot.delete_message(chat_id, msg.message_id)
+        await _cleanup_reply_messages(context.bot, chat_id, prompt_msg_id, msg.message_id)
         if removed:
             note = f"🗑 Position {position} removed:\n<blockquote>{removed['text']}</blockquote>"
         else:
@@ -288,16 +295,14 @@ async def reply_handler(update: Update, context: ContextTypes.DEFAULT_TYPE) -> N
         list_name = state["list_name"]
         parts = user_text.split(None, 1)
         if len(parts) < 2 or not parts[0].isdigit():
-            await context.bot.delete_message(chat_id, prompt_msg_id)
-            await context.bot.delete_message(chat_id, msg.message_id)
+            await _cleanup_reply_messages(context.bot, chat_id, prompt_msg_id, msg.message_id)
             text, markup = _render_list_view(chat_id, list_name, "⚠️ Format must be: `<position> <new text>`")
             await context.bot.edit_message_text(text, chat_id=chat_id, message_id=panel_msg_id, reply_markup=markup, parse_mode="Markdown")
             return
         position, new_text = int(parts[0]), parts[1].strip()
         user_name = msg.from_user.full_name if msg.from_user else ""
         updated = edit_prompt(chat_id, list_name, position, new_text)
-        await context.bot.delete_message(chat_id, prompt_msg_id)
-        await context.bot.delete_message(chat_id, msg.message_id)
+        await _cleanup_reply_messages(context.bot, chat_id, prompt_msg_id, msg.message_id)
         if updated:
             await _notify(
                 context.bot, chat_id,
@@ -311,8 +316,7 @@ async def reply_handler(update: Update, context: ContextTypes.DEFAULT_TYPE) -> N
     elif state["action"] == "new_list":
         list_name = user_text
         text, markup = _render_list_view(chat_id, list_name, "✅ List created! Tap ➕ Add to start filling it.")
-        await context.bot.delete_message(chat_id, prompt_msg_id)
-        await context.bot.delete_message(chat_id, msg.message_id)
+        await _cleanup_reply_messages(context.bot, chat_id, prompt_msg_id, msg.message_id)
         await context.bot.edit_message_text(text, chat_id=chat_id, message_id=panel_msg_id, reply_markup=markup, parse_mode="Markdown")
 
 
@@ -321,21 +325,13 @@ async def draw_command(update: Update, context: ContextTypes.DEFAULT_TYPE) -> No
     chat_id = update.effective_chat.id
     list_name = get_default_list(chat_id)
     if not list_name:
-        await update.message.reply_text("No default list set. Open /lb, pick a list, and tap ⭐ Default.", parse_mode="Markdown")
+        await update.message.reply_text(_NO_DEFAULT_LIST_MSG, parse_mode="Markdown")
         return
     user_name = update.message.from_user.full_name if update.message.from_user else "Someone"
-    prompt = draw_random_prompt(chat_id, list_name)
-    if not prompt:
+    if not await _do_draw(context.bot, chat_id, list_name, user_name, update.message.message_thread_id):
         await update.message.reply_text(f"*{list_name}* is empty.", parse_mode="Markdown")
         return
-    added_by = prompt["added_by_name"] or ""
-    author_line = f"\n<i>added by <tg-spoiler>{added_by}</tg-spoiler></i>" if added_by else ""
     await update.message.delete()
-    await _notify(
-        context.bot, chat_id,
-        f"🎲 <b>{user_name}</b> drew from <b>{list_name}</b>:\n<blockquote>{prompt['text']}</blockquote>{author_line}",
-        update.message.message_thread_id,
-    )
 
 
 async def add_command(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
@@ -343,7 +339,7 @@ async def add_command(update: Update, context: ContextTypes.DEFAULT_TYPE) -> Non
     chat_id = update.effective_chat.id
     list_name = get_default_list(chat_id)
     if not list_name:
-        await update.message.reply_text("No default list set. Open /lb, pick a list, and tap ⭐ Default.", parse_mode="Markdown")
+        await update.message.reply_text(_NO_DEFAULT_LIST_MSG, parse_mode="Markdown")
         return
     text = " ".join(context.args).strip() if context.args else ""
     if not text:
