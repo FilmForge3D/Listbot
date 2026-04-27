@@ -8,16 +8,22 @@ Extrahiert aus einem Telegram-Gruppenexport (result.json):
 import json
 import re
 import argparse
+from difflib import get_close_matches
 from pathlib import Path
 
 
 # Muster für relevante ListBot-Nachrichten
 LISTBOT_PATTERNS = [
-    (re.compile(r"^.+\s+drew the following:", re.IGNORECASE),  "drew"),
     (re.compile(r"^.+\s+added the following:", re.IGNORECASE), "added"),
-    (re.compile(r"^.+\s+hat\s+.+\s+gegruppt",  re.IGNORECASE), "gruppt"),
-    (re.compile(r"^Successfully added '.+' in position", re.IGNORECASE), "added_old"),
-    (re.compile(r"^Successfully added '.+' to the list\.", re.IGNORECASE), "added_oldest"),
+    (re.compile(r"^.+ successfully added '.+' in position \d+ to the list\.", re.IGNORECASE), "added"),
+    (re.compile(r"^✅ .+ added \d+: '.+'"), "added"),
+    (re.compile(r"^Successfully added '.+' in position", re.IGNORECASE), "added"),
+    (re.compile(r"^Successfully added '.+' to the list\.", re.IGNORECASE), "added"),
+    (re.compile(r"^\d+: .+"), "drew"),
+    (re.compile(r"^.+\s+drew the following:", re.IGNORECASE), "drew"),
+    (re.compile(r"^.+ successfully changed position \d+ from '.+' into '.+'", re.IGNORECASE), "edited"),
+    (re.compile(r"^✅ .+ changed \d+ from '.+' to '.+'"), "edited"),
+    (re.compile(r"^.+\s+hat\s+.+\s+gegruppt", re.IGNORECASE), "gruppt"),
 ]
 
 
@@ -60,6 +66,30 @@ def load_json_tolerant(path: Path) -> dict:
             raise
 
 
+_ADD_EDIT_COMMANDS = ["add", "grupp", "edit"]
+
+_POS_PATTERNS = [
+    re.compile(r"als\s+(\d+)\.\s+gegruppt", re.IGNORECASE),
+    re.compile(r"added\s+(\d+):", re.IGNORECASE),
+    re.compile(r"in position\s+(\d+)", re.IGNORECASE),
+    re.compile(r"changed position\s+(\d+)", re.IGNORECASE),
+    re.compile(r"changed\s+(\d+)\s+from", re.IGNORECASE),
+]
+
+
+def _is_add_edit_cmd(text: str) -> bool:
+    cmd = text.split()[0].lstrip("/").rstrip("23")
+    return bool(get_close_matches(cmd, _ADD_EDIT_COMMANDS, n=1, cutoff=0.6))
+
+
+def _extract_position(text: str) -> int | None:
+    for pat in _POS_PATTERNS:
+        m = pat.search(text)
+        if m:
+            return int(m.group(1))
+    return None
+
+
 def extract_messages(input_path: Path, bot_name: str = "ListBot") -> dict:
     data = load_json_tolerant(input_path)
 
@@ -92,18 +122,39 @@ def extract_messages(input_path: Path, bot_name: str = "ListBot") -> dict:
         if text.startswith("/"):
             slash_msgs.append(entry)
 
-    # Deduplizierung: ListBot added*/gruppt-Nachrichten entfernen,
-    # wenn ein /add-Befehl in einem Fenster von MSG_WINDOW IDs davor liegt
+    # Deduplizierung: ListBot added/gruppt/edited-Nachrichten entfernen,
+    # wenn ein /add- oder /edit-Befehl in einem Fenster von MSG_WINDOW IDs davor liegt
     MSG_WINDOW = 5
-    OVERLAP_TYPES = {"added", "added_old", "added_oldest", "gruppt"}
-    slash_ids = {msg["id"] for msg in slash_msgs if msg["text"].startswith("/add")}
+    OVERLAP_TYPES = {"added", "gruppt", "edited"}
+    slash_ids = {msg["id"] for msg in slash_msgs if _is_add_edit_cmd(msg["text"])}
     listbot_msgs = [
         msg for msg in listbot_msgs
         if msg["match_type"] not in OVERLAP_TYPES
         or not any((msg["id"] - w) in slash_ids for w in range(1, MSG_WINDOW + 1))
     ]
 
-    return {"listbot": listbot_msgs, "slash_commands": slash_msgs}
+    # Deduplizierung: added/gruppt entfernen wenn ein späteres edit dieselbe Position betrifft;
+    # bei mehreren edits nur den letzten behalten
+    edited_positions = {
+        _extract_position(msg["text"])
+        for msg in listbot_msgs if msg["match_type"] == "edited"
+    } - {None}
+    seen_edited: set[int] = set()
+    merged: list[dict] = []
+    for msg in reversed(listbot_msgs):
+        pos = _extract_position(msg["text"])
+        if msg["match_type"] == "edited":
+            if pos in seen_edited:
+                continue
+            seen_edited.add(pos)
+        elif msg["match_type"] in {"added", "gruppt"} and pos in edited_positions:
+            continue
+        merged.append(msg)
+    listbot_msgs = list(reversed(merged))
+
+    chat_id = data.get("id")
+    chat_name = data.get("name", "")
+    return {"chat_id": chat_id, "chat_name": chat_name, "listbot": listbot_msgs, "slash_commands": slash_msgs}
 
 
 def print_section(title: str, messages: list):
@@ -157,6 +208,7 @@ def main():
     print(f"\n{'='*60}")
     print(f"  Zusammenfassung")
     print(f"{'='*60}")
+    print(f"  Chat                       : {result['chat_name']} (ID {result['chat_id']})")
     print(f"  {args.bot_name}-Nachrichten : {len(result['listbot'])}")
     print(f"  /-Nachrichten              : {len(result['slash_commands'])}")
 
