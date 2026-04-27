@@ -6,7 +6,7 @@ import sys
 from pathlib import Path
 from telegram.ext import Application, CommandHandler, CallbackQueryHandler, MessageHandler, filters, ContextTypes
 from telegram import Update, InlineKeyboardButton, InlineKeyboardMarkup, ForceReply
-from database import init_db, get_list_names, get_prompts, draw_random_prompt, add_prompt, edit_prompt, get_stats, get_default_list, set_default_list
+from database import init_db, get_list_names, get_prompts, draw_random_prompt, add_prompt, edit_prompt, remove_prompt, get_stats, get_default_list, set_default_list
 
 # Enable logging
 logging.basicConfig(
@@ -34,11 +34,13 @@ def load_token() -> str:
 def _render_lists_view(chat_id: int, title: str) -> tuple[str, InlineKeyboardMarkup]:
     """Build the list-selection panel text and keyboard."""
     names = get_list_names(chat_id)
+    default = get_default_list(chat_id)
     text = f"*{title}*\n\nYour lists:" if names else f"*{title}*\n\nNo lists yet. Create one!"
     buttons: list[list[InlineKeyboardButton]] = []
     row: list[InlineKeyboardButton] = []
     for name in names:
-        row.append(InlineKeyboardButton(name, callback_data=f"open:{name}"))
+        label = f"⭐ {name}" if name == default else name
+        row.append(InlineKeyboardButton(label, callback_data=f"open:{name}"))
         if len(row) == 2:
             buttons.append(row)
             row = []
@@ -88,16 +90,19 @@ async def button_handler(update: Update, context: ContextTypes.DEFAULT_TYPE) -> 
         list_name = data[5:]
         user_name = query.from_user.full_name if query.from_user else "Someone"
         prompt = draw_random_prompt(chat_id, list_name)
-        if prompt:
-            note = f"🎲 Drew: _{prompt['text']}_"
-            await query.message.reply_text(
-                f"🎲 *{user_name}* drew from *{list_name}*:\n_{prompt['text']}_",
-                parse_mode="Markdown",
-            )
-        else:
-            note = "⚠️ All items have been drawn."
-        text, markup = _render_list_view(chat_id, list_name, note)
-        await query.edit_message_text(text, reply_markup=markup, parse_mode="Markdown")
+        if not prompt:
+            text, markup = _render_list_view(chat_id, list_name, "⚠️ All items have been drawn.")
+            await query.edit_message_text(text, reply_markup=markup, parse_mode="Markdown")
+            return
+        added_by = prompt["added_by_name"] or ""
+        author_line = f"\n<i>added by <tg-spoiler>{added_by}</tg-spoiler></i>" if added_by else ""
+        await query.message.delete()
+        await context.bot.send_message(
+            chat_id,
+            f"🎲 <b>{user_name}</b> drew from <b>{list_name}</b>:\n<blockquote>{prompt['text']}</blockquote>{author_line}",
+            parse_mode="HTML",
+            message_thread_id=query.message.message_thread_id,
+        )
 
     elif data.startswith("list:"):
         parts = data[5:].rsplit(":", 1)
@@ -144,6 +149,19 @@ async def button_handler(update: Update, context: ContextTypes.DEFAULT_TYPE) -> 
         )
         _, markup = _render_list_view(chat_id, list_name)
         await query.edit_message_text(stats_text, reply_markup=markup, parse_mode="Markdown")
+
+    elif data.startswith("remove:"):
+        list_name = data[7:]
+        prompt_msg = await query.message.reply_text(
+            f"Reply with the position number to remove from *{list_name}*:",
+            reply_markup=ForceReply(selective=True),
+            parse_mode="Markdown",
+        )
+        context.chat_data[prompt_msg.message_id] = {
+            "action": "remove",
+            "list_name": list_name,
+            "panel_msg_id": query.message.message_id,
+        }
 
     elif data.startswith("edit:"):
         list_name = data[5:]
@@ -209,11 +227,30 @@ async def reply_handler(update: Update, context: ContextTypes.DEFAULT_TYPE) -> N
         await context.bot.delete_message(chat_id, msg.message_id)
         await context.bot.send_message(
             chat_id,
-            f"✅ *{user_name}* added #{position} to *{list_name}*:\n_{user_text}_",
+            f"✅ *{user_name}* _added #{position} to {list_name}_:\n{user_text}",
             parse_mode="Markdown",
+            message_thread_id=msg.message_thread_id,
         )
-        text, markup = _render_list_view(chat_id, list_name)
-        await context.bot.edit_message_text(text, chat_id=chat_id, message_id=panel_msg_id, reply_markup=markup, parse_mode="Markdown")
+        await context.bot.delete_message(chat_id, panel_msg_id)
+
+    elif state["action"] == "remove":
+        list_name = state["list_name"]
+        if not user_text.isdigit():
+            await context.bot.delete_message(chat_id, msg.reply_to_message.message_id)
+            await context.bot.delete_message(chat_id, msg.message_id)
+            text, markup = _render_list_view(chat_id, list_name, "⚠️ Please reply with a position number.")
+            await context.bot.edit_message_text(text, chat_id=chat_id, message_id=panel_msg_id, reply_markup=markup, parse_mode="Markdown")
+            return
+        position = int(user_text)
+        removed = remove_prompt(chat_id, list_name, position)
+        await context.bot.delete_message(chat_id, msg.reply_to_message.message_id)
+        await context.bot.delete_message(chat_id, msg.message_id)
+        if removed:
+            note = f"🗑 Position {position} removed:\n_{removed['text']}_"
+        else:
+            note = f"⚠️ No item at position {position}."
+        await context.bot.send_message(chat_id, note, parse_mode="Markdown", message_thread_id=msg.message_thread_id)
+        await context.bot.delete_message(chat_id, panel_msg_id)
 
     elif state["action"] == "edit":
         list_name = state["list_name"]
@@ -225,12 +262,20 @@ async def reply_handler(update: Update, context: ContextTypes.DEFAULT_TYPE) -> N
             await context.bot.edit_message_text(text, chat_id=chat_id, message_id=panel_msg_id, reply_markup=markup, parse_mode="Markdown")
             return
         position, new_text = int(parts[0]), parts[1].strip()
+        user_name = msg.from_user.full_name if msg.from_user else ""
         updated = edit_prompt(chat_id, list_name, position, new_text)
         await context.bot.delete_message(chat_id, msg.reply_to_message.message_id)
         await context.bot.delete_message(chat_id, msg.message_id)
-        note = f"✅ Position {position} updated." if updated else f"⚠️ No item at position {position}."
-        text, markup = _render_list_view(chat_id, list_name, note)
-        await context.bot.edit_message_text(text, chat_id=chat_id, message_id=panel_msg_id, reply_markup=markup, parse_mode="Markdown")
+        if updated:
+            await context.bot.send_message(
+                chat_id,
+                f"✏️ *{user_name}* _edited #{position} in {list_name}_:\n{new_text}",
+                parse_mode="Markdown",
+                message_thread_id=msg.message_thread_id,
+            )
+        else:
+            await context.bot.send_message(chat_id, f"⚠️ No item at position {position}.", message_thread_id=msg.message_thread_id)
+        await context.bot.delete_message(chat_id, panel_msg_id)
 
     elif state["action"] == "new_list":
         list_name = user_text
@@ -252,9 +297,14 @@ async def draw_command(update: Update, context: ContextTypes.DEFAULT_TYPE) -> No
     if not prompt:
         await update.message.reply_text(f"*{list_name}* is empty.", parse_mode="Markdown")
         return
+    added_by = prompt["added_by_name"] or ""
+    author_line = f"\n<i>added by {added_by}</i>" if added_by else ""
     await update.message.delete()
     await context.bot.send_message(
-        chat_id, f"🎲 *{user_name}* drew from *{list_name}*:\n_{prompt['text']}_", parse_mode="Markdown"
+        chat_id,
+        f"🎲 <b>{user_name}</b> drew from <b>{list_name}</b>:\n<blockquote>{prompt['text']}</blockquote>{author_line}",
+        parse_mode="HTML",
+        message_thread_id=update.message.message_thread_id,
     )
 
 
@@ -273,7 +323,8 @@ async def add_command(update: Update, context: ContextTypes.DEFAULT_TYPE) -> Non
     position = add_prompt(chat_id, list_name, text, added_by_name=user_name)
     await update.message.delete()
     await context.bot.send_message(
-        chat_id, f"✅ *{user_name}* added #{position} to *{list_name}*:\n_{text}_", parse_mode="Markdown"
+        chat_id, f"✅ *{user_name}* _added #{position} to {list_name}_:\n{text}", parse_mode="Markdown",
+        message_thread_id=update.message.message_thread_id,
     )
 
 
@@ -282,8 +333,11 @@ async def show_panel(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None
     """Post the interactive list panel in response to /lb."""
     chat = update.effective_chat
     text, markup = _render_lists_view(chat.id, chat.title or "Lists")
-    await update.message.reply_text(text, reply_markup=markup, parse_mode="Markdown")
     await update.message.delete()
+    await context.bot.send_message(
+        chat.id, text, reply_markup=markup, parse_mode="Markdown",
+        message_thread_id=update.message.message_thread_id,
+    )
 
 
 async def help_command(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:

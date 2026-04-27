@@ -216,19 +216,25 @@ def edit_prompt(chat_id: int, list_name: str, position: int, new_text: str) -> b
         return cur.rowcount > 0
 
 
-def remove_prompt(chat_id: int, list_name: str, position: int) -> bool:
-    """Remove a prompt by 1-based position. Returns True if a row was deleted."""
+def remove_prompt(chat_id: int, list_name: str, position: int) -> dict | None:
+    """Remove a prompt by 1-based position. Returns the deleted prompt dict or None."""
     with get_connection() as conn:
         row = conn.execute(
             "SELECT id FROM lists WHERE chat_id = ? AND list_name = ?",
             (chat_id, list_name),
         ).fetchone()
         if not row:
-            return False
+            return None
         list_id = row["id"]
-        cur = conn.execute(
+        prompt = conn.execute(
+            "SELECT text FROM prompts WHERE list_id = ? AND position = ?",
+            (list_id, position),
+        ).fetchone()
+        if not prompt:
+            return None
+        conn.execute(
             "DELETE FROM prompts WHERE list_id = ? AND position = ?",
             (list_id, position),
         )
         conn.commit()
-        return cur.rowcount > 0
+        return {"text": prompt["text"]}
