@@ -8,6 +8,7 @@ Extrahiert aus einem Telegram-Gruppenexport (result.json):
 import json
 import re
 import argparse
+from collections import Counter
 from difflib import get_close_matches
 from pathlib import Path
 
@@ -163,11 +164,13 @@ _ADD_CMD_BASES = {"add", "grupp"}
 def normalize_prompts(result: dict) -> dict:
     """Transforms raw extracted data into a single normalized prompts list."""
     draw_counts: dict[str, int] = {}
+    last_drawn: dict[str, str] = {}
     for msg in result["listbot"]:
         if msg["match_type"] == "drew" and _is_draw_result(msg["text"]):
             for p in _extract_drew_prompts(msg["text"]):
                 key = p.strip().lower()
                 draw_counts[key] = draw_counts.get(key, 0) + 1
+                last_drawn[key] = msg["date"]
 
     prompts = []
     for msg in result["slash_commands"]:
@@ -183,6 +186,7 @@ def normalize_prompts(result: dict) -> dict:
             "prompt": prompt,
             "list_number": list_number,
             "draw_count": draw_counts.get(prompt.strip().lower(), 0),
+            "last_drawn": last_drawn.get(prompt.strip().lower()),
         })
 
     for msg in result["listbot"]:
@@ -197,12 +201,14 @@ def normalize_prompts(result: dict) -> dict:
             "prompt": prompt,
             "list_number": 1,
             "draw_count": draw_counts.get(prompt.strip().lower(), 0),
+            "last_drawn": last_drawn.get(prompt.strip().lower()),
         })
 
     prompts.sort(key=lambda x: x["date"])
     return {
         "chat_id": result["chat_id"],
         "chat_name": result["chat_name"],
+        "list_names": {"1": "list1", "2": "list2", "3": "list3"},
         "prompts": prompts,
     }
 
@@ -320,16 +326,13 @@ def main():
     normalized = normalize_prompts(result)
 
     if not args.quiet:
-        print_section(f"Nachrichten von {args.bot_name}", result["listbot"])
-        print_section("Nachrichten die mit / beginnen", result["slash_commands"])
-
-    print(f"\n{'='*60}")
-    print(f"  Zusammenfassung")
-    print(f"{'='*60}")
-    print(f"  Chat                       : {result['chat_name']} (ID {result['chat_id']})")
-    print(f"  {args.bot_name}-Nachrichten : {len(result['listbot'])}")
-    print(f"  /-Nachrichten              : {len(result['slash_commands'])}")
-    print(f"  Prompts (normalisiert)       : {len(normalized['prompts'])}")
+        print(f"\n{'='*60}")
+        print(f"  Chat: {result['chat_name']} (ID {result['chat_id']})")
+        print(f"  Prompts (normalisiert): {len(normalized['prompts'])}")
+        print(f"{'='*60}")
+        user_counts = Counter(p["first_name"] for p in normalized["prompts"])
+        for name, count in user_counts.most_common():
+            print(f"  {name:<20}: {count}")
 
     if args.output_json:
         out = Path(args.output_json)
