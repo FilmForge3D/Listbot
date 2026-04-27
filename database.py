@@ -105,19 +105,20 @@ def get_list_names(chat_id: int) -> list[str]:
 
 
 def add_prompt(chat_id: int, list_name: str, text: str, added_by_name: str = "") -> int:
-    """Append a prompt to a list. Returns the new prompt id."""
+    """Append a prompt to a list. Returns the new prompt's position."""
     with get_connection() as conn:
         list_id = _get_or_create_list(conn, chat_id, list_name)
         max_pos = conn.execute(
             "SELECT COALESCE(MAX(position), 0) FROM prompts WHERE list_id = ?",
             (list_id,),
         ).fetchone()[0]
-        cur = conn.execute(
+        position = max_pos + 1
+        conn.execute(
             "INSERT INTO prompts (list_id, position, text, added_by_name) VALUES (?, ?, ?, ?)",
-            (list_id, max_pos + 1, text, added_by_name or None),
+            (list_id, position, text, added_by_name or None),
         )
         conn.commit()
-        return cur.lastrowid
+        return position
 
 
 def get_prompts(chat_id: int, list_name: str) -> list[sqlite3.Row]:
@@ -195,6 +196,24 @@ def get_stats(chat_id: int, list_name: str) -> dict | None:
             "most_drawn": {"text": most_drawn["text"], "count": most_drawn["drawn"]} if most_drawn else None,
             "by_user": [{"name": r["name"], "count": r["cnt"]} for r in by_user],
         }
+
+
+def edit_prompt(chat_id: int, list_name: str, position: int, new_text: str) -> bool:
+    """Update the text of a prompt by 1-based position. Returns True if a row was updated."""
+    with get_connection() as conn:
+        row = conn.execute(
+            "SELECT id FROM lists WHERE chat_id = ? AND list_name = ?",
+            (chat_id, list_name),
+        ).fetchone()
+        if not row:
+            return False
+        list_id = row["id"]
+        cur = conn.execute(
+            "UPDATE prompts SET text = ? WHERE list_id = ? AND position = ?",
+            (new_text, list_id, position),
+        )
+        conn.commit()
+        return cur.rowcount > 0
 
 
 def remove_prompt(chat_id: int, list_name: str, position: int) -> bool:
