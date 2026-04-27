@@ -6,7 +6,7 @@ import sys
 from pathlib import Path
 from telegram.ext import Application, CommandHandler, CallbackQueryHandler, MessageHandler, filters, ContextTypes
 from telegram import Update, InlineKeyboardButton, InlineKeyboardMarkup, ForceReply
-from database import init_db, get_list_names, get_prompts, draw_random_prompt, add_prompt, get_stats
+from database import init_db, get_list_names, get_prompts, draw_random_prompt, add_prompt, get_stats, get_default_list, set_default_list
 
 # Enable logging
 logging.basicConfig(
@@ -60,7 +60,8 @@ def _render_list_view(chat_id: int, list_name: str, note: str = "") -> tuple[str
         [InlineKeyboardButton("🗑 Remove", callback_data=f"remove:{list_name}"),
          InlineKeyboardButton("📋 View", callback_data=f"list:{list_name}:0")],
         [InlineKeyboardButton("📊 Stats", callback_data=f"stats:{list_name}"),
-         InlineKeyboardButton("← Back", callback_data="back")],
+         InlineKeyboardButton("⭐ Default", callback_data=f"set_default:{list_name}")],
+        [InlineKeyboardButton("← Back", callback_data="back")],
     ])
     return text, markup
 
@@ -152,6 +153,12 @@ async def button_handler(update: Update, context: ContextTypes.DEFAULT_TYPE) -> 
             "panel_msg_id": query.message.message_id,
         }
 
+    elif data.startswith("set_default:"):
+        list_name = data[12:]
+        set_default_list(chat_id, list_name)
+        text, markup = _render_list_view(chat_id, list_name, f"⭐ *{list_name}* is now the default list.")
+        await query.edit_message_text(text, reply_markup=markup, parse_mode="Markdown")
+
     elif data == "new_list":
         prompt_msg = await query.message.reply_text(
             "Reply with the name for the new list:",
@@ -198,6 +205,44 @@ async def reply_handler(update: Update, context: ContextTypes.DEFAULT_TYPE) -> N
         await context.bot.edit_message_text(text, chat_id=chat_id, message_id=panel_msg_id, reply_markup=markup, parse_mode="Markdown")
 
 
+async def draw_command(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
+    """Draw a random item from the default list."""
+    chat_id = update.effective_chat.id
+    list_name = get_default_list(chat_id)
+    if not list_name:
+        await update.message.reply_text("No default list set. Open /lb, pick a list, and tap ⭐ Default.", parse_mode="Markdown")
+        return
+    user_name = update.message.from_user.full_name if update.message.from_user else "Someone"
+    prompt = draw_random_prompt(chat_id, list_name)
+    if not prompt:
+        await update.message.reply_text(f"*{list_name}* is empty.", parse_mode="Markdown")
+        return
+    await update.message.delete()
+    await context.bot.send_message(
+        chat_id, f"🎲 *{user_name}* drew from *{list_name}*:\n_{prompt['text']}_", parse_mode="Markdown"
+    )
+
+
+async def add_command(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
+    """Add an item to the default list. Usage: /add <item text>"""
+    chat_id = update.effective_chat.id
+    list_name = get_default_list(chat_id)
+    if not list_name:
+        await update.message.reply_text("No default list set. Open /lb, pick a list, and tap ⭐ Default.", parse_mode="Markdown")
+        return
+    text = " ".join(context.args).strip() if context.args else ""
+    if not text:
+        await update.message.reply_text("Usage: `/add <item text>`", parse_mode="Markdown")
+        return
+    user_name = update.message.from_user.full_name if update.message.from_user else ""
+    add_prompt(chat_id, list_name, text, added_by_name=user_name)
+    await update.message.delete()
+    await context.bot.send_message(
+        chat_id, f"✅ *{user_name}* added to *{list_name}*:\n_{text}_", parse_mode="Markdown"
+    )
+
+
+
 async def show_panel(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
     """Post the interactive list panel in response to /lb."""
     chat = update.effective_chat
@@ -221,6 +266,8 @@ def main() -> None:
     # Add handlers
     application.add_handler(CommandHandler("help", help_command))
     application.add_handler(CommandHandler("lb", show_panel))
+    application.add_handler(CommandHandler("add", add_command))
+    application.add_handler(CommandHandler("draw", draw_command))
     application.add_handler(CallbackQueryHandler(button_handler))
     application.add_handler(MessageHandler(filters.REPLY & filters.TEXT & ~filters.COMMAND, reply_handler))
 

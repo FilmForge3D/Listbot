@@ -184,6 +184,11 @@ python "Nachricht extrahieren/extract_telegram.py" input.json --bot-name "MyBot"
 - `--output-json FILE` — Save results as JSON
 - `--quiet, -q` — Suppress console output
 
+## Git Workflow
+
+- **Commit on command**: When the user says "commit", create a git commit immediately — no confirmation needed. The user has already reviewed and verified the feature before issuing the command.
+- **Keep changes synced**: Stage and commit only the files relevant to the feature being committed.
+
 ## Development Safeguards
 
 ⚠️ **Critical constraints for all future work:**
