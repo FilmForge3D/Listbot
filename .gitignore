@@ -222,3 +222,4 @@ __marimo__/
 *.json
 token.txt
 *.db
+*.code-workspace
