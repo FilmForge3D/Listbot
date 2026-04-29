@@ -24,6 +24,12 @@ def init_db() -> None:
     """Create tables if they do not exist yet."""
     with get_connection() as conn:
         conn.execute("""
+            CREATE TABLE IF NOT EXISTS users (
+                user_id INTEGER PRIMARY KEY,
+                name    TEXT    NOT NULL
+            )
+        """)
+        conn.execute("""
             CREATE TABLE IF NOT EXISTS lists (
                 id         INTEGER PRIMARY KEY AUTOINCREMENT,
                 chat_id    INTEGER NOT NULL,
@@ -34,14 +40,14 @@ def init_db() -> None:
         """)
         conn.execute("""
             CREATE TABLE IF NOT EXISTS prompts (
-                id            INTEGER PRIMARY KEY AUTOINCREMENT,
-                list_id       INTEGER NOT NULL REFERENCES lists(id) ON DELETE CASCADE,
-                position      INTEGER NOT NULL,
-                text          TEXT    NOT NULL,
-                drawn         INTEGER NOT NULL DEFAULT 0,
-                drawn_at      TEXT,
-                added_by_name TEXT,
-                added_at      TEXT    NOT NULL DEFAULT (datetime('now')),
+                id           INTEGER PRIMARY KEY AUTOINCREMENT,
+                list_id      INTEGER NOT NULL REFERENCES lists(id) ON DELETE CASCADE,
+                position     INTEGER NOT NULL,
+                text         TEXT    NOT NULL,
+                drawn        INTEGER NOT NULL DEFAULT 0,
+                drawn_at     TEXT,
+                added_by_id  INTEGER REFERENCES users(user_id),
+                added_at     TEXT    NOT NULL DEFAULT (datetime('now')),
                 UNIQUE (list_id, position)
             )
         """)
@@ -52,7 +58,7 @@ def init_db() -> None:
             )
         """)
         try:
-            conn.execute("ALTER TABLE prompts ADD COLUMN added_by_name TEXT")
+            conn.execute("ALTER TABLE prompts ADD COLUMN added_by_id INTEGER REFERENCES users(user_id)")
         except Exception:
             pass
         conn.commit()
@@ -76,6 +82,17 @@ def set_default_list(chat_id: int, list_name: str) -> None:
             "INSERT INTO chat_settings (chat_id, default_list) VALUES (?, ?)"
             " ON CONFLICT(chat_id) DO UPDATE SET default_list = excluded.default_list",
             (chat_id, list_name),
+        )
+        conn.commit()
+
+
+def upsert_user(user_id: int, name: str) -> None:
+    """Insert or update a user's display name."""
+    with get_connection() as conn:
+        conn.execute(
+            "INSERT INTO users (user_id, name) VALUES (?, ?)"
+            " ON CONFLICT(user_id) DO UPDATE SET name = excluded.name",
+            (user_id, name),
         )
         conn.commit()
 
@@ -105,7 +122,7 @@ def get_list_names(chat_id: int) -> list[str]:
         return [row["list_name"] for row in rows]
 
 
-def add_prompt(chat_id: int, list_name: str, text: str, added_by_name: str = "") -> int:
+def add_prompt(chat_id: int, list_name: str, text: str, added_by_id: int | None = None) -> int:
     """Append a prompt to a list. Returns the new prompt's position."""
     with get_connection() as conn:
         list_id = _get_or_create_list(conn, chat_id, list_name)
@@ -115,8 +132,8 @@ def add_prompt(chat_id: int, list_name: str, text: str, added_by_name: str = "")
         ).fetchone()[0]
         position = max_pos + 1
         conn.execute(
-            "INSERT INTO prompts (list_id, position, text, added_by_name) VALUES (?, ?, ?, ?)",
-            (list_id, position, text, added_by_name or None),
+            "INSERT INTO prompts (list_id, position, text, added_by_id) VALUES (?, ?, ?, ?)",
+            (list_id, position, text, added_by_id),
         )
         conn.commit()
         return position
@@ -147,7 +164,9 @@ def draw_random_prompt(chat_id: int, list_name: str) -> sqlite3.Row | None:
             return None
         list_id = row["id"]
         prompts = conn.execute(
-            "SELECT * FROM prompts WHERE list_id = ? ORDER BY position",
+            "SELECT p.*, u.name AS added_by_name FROM prompts p"
+            " LEFT JOIN users u ON p.added_by_id = u.user_id"
+            " WHERE p.list_id = ? ORDER BY p.position",
             (list_id,),
         ).fetchall()
         if not prompts:
@@ -186,8 +205,9 @@ def get_stats(chat_id: int, list_name: str) -> dict | None:
             (list_id,),
         ).fetchone()
         by_user = conn.execute(
-            "SELECT COALESCE(added_by_name, 'Unknown') AS name, COUNT(*) AS cnt"
-            " FROM prompts WHERE list_id = ? GROUP BY added_by_name ORDER BY cnt DESC",
+            "SELECT COALESCE(u.name, 'Unknown') AS name, COUNT(*) AS cnt"
+            " FROM prompts p LEFT JOIN users u ON p.added_by_id = u.user_id"
+            " WHERE p.list_id = ? GROUP BY p.added_by_id ORDER BY cnt DESC",
             (list_id,),
         ).fetchall()
         return {

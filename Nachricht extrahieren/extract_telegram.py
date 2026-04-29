@@ -163,6 +163,7 @@ _ADD_CMD_BASES = {"add", "grupp"}
 
 def normalize_prompts(result: dict) -> dict:
     """Transforms raw extracted data into a single normalized prompts list."""
+    user_lookup: dict[str, str] = result.get("user_lookup", {})
     draw_counts: dict[str, int] = {}
     last_drawn: dict[str, str] = {}
     for msg in result["listbot"]:
@@ -180,9 +181,12 @@ def normalize_prompts(result: dict) -> dict:
         prompt, list_number = _parse_add_prompt(msg["text"])
         if not prompt:
             continue
+        full_name = msg["from"]
+        fname = full_name.split()[0]
         prompts.append({
             "date": msg["date"],
-            "first_name": msg["from"].split()[0],
+            "first_name": fname,
+            "user_id": user_lookup.get(full_name) or user_lookup.get(fname) or "",
             "prompt": prompt,
             "list_number": list_number,
             "draw_count": draw_counts.get(prompt.strip().lower(), 0),
@@ -195,9 +199,11 @@ def normalize_prompts(result: dict) -> dict:
         first_name, prompt = _parse_listbot_entry(msg["text"])
         if not prompt:
             continue
+        fname = first_name or "unknown"
         prompts.append({
             "date": msg["date"],
-            "first_name": first_name or "unknown",
+            "first_name": fname,
+            "user_id": user_lookup.get(fname, ""),
             "prompt": prompt,
             "list_number": 1,
             "draw_count": draw_counts.get(prompt.strip().lower(), 0),
@@ -209,6 +215,7 @@ def normalize_prompts(result: dict) -> dict:
         "chat_id": result["chat_id"],
         "chat_name": result["chat_name"],
         "list_names": {"1": "list1", "2": "list2", "3": "list3"},
+        "user_lookup": result.get("user_lookup", {}),
         "prompts": prompts,
     }
 
@@ -275,9 +282,34 @@ def extract_messages(input_path: Path, bot_name: str = "ListBot") -> dict:
         merged.append(msg)
     listbot_msgs = list(reversed(merged))
 
+    user_lookup: dict[str, str] = {}
+    for msg in messages:
+        if msg.get("type") != "message":
+            continue
+        name = msg.get("from", "") or ""
+        raw_id = msg.get("from_id", "") or ""
+        uid = raw_id.removeprefix("user")
+        if name and uid:
+            user_lookup[name] = uid
+
+    for msg in listbot_msgs:
+        first_name, _ = _parse_listbot_entry(msg["text"])
+        if first_name and first_name not in user_lookup:
+            inherited = next(
+                (uid for name, uid in user_lookup.items() if name.split()[0] == first_name and uid),
+                "",
+            )
+            user_lookup[first_name] = inherited
+
     chat_id = data.get("id")
     chat_name = data.get("name", "")
-    return {"chat_id": chat_id, "chat_name": chat_name, "listbot": listbot_msgs, "slash_commands": slash_msgs}
+    return {
+        "chat_id": chat_id,
+        "chat_name": chat_name,
+        "listbot": listbot_msgs,
+        "slash_commands": slash_msgs,
+        "user_lookup": user_lookup,
+    }
 
 
 def print_section(title: str, messages: list):
@@ -326,6 +358,15 @@ def main():
     normalized = normalize_prompts(result)
 
     if not args.quiet:
+        lookup = result.get("user_lookup", {})
+        print(f"\n{'='*60}")
+        print(f"  User ID Lookup ({len(lookup)} users)")
+        print(f"{'='*60}")
+        print(f"  {'Display Name':<25} | User ID")
+        print(f"  {'-'*25}-+-{'-'*15}")
+        for name, uid in sorted(lookup.items()):
+            print(f"  {name:<25} | {uid}")
+
         print(f"\n{'='*60}")
         print(f"  Chat: {result['chat_name']} (ID {result['chat_id']})")
         print(f"  Prompts (normalisiert): {len(normalized['prompts'])}")

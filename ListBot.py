@@ -3,11 +3,12 @@
 
 import logging
 import os
+import re
 import sys
 from pathlib import Path
 from telegram.ext import Application, CommandHandler, CallbackQueryHandler, MessageHandler, filters, ContextTypes
 from telegram import Update, InlineKeyboardButton, InlineKeyboardMarkup, ForceReply, MessageEntity
-from database import init_db, get_list_names, get_prompts, draw_random_prompt, add_prompt, edit_prompt, remove_prompt, get_stats, get_default_list, set_default_list
+from database import init_db, get_list_names, get_prompts, draw_random_prompt, add_prompt, edit_prompt, remove_prompt, get_stats, get_default_list, set_default_list, upsert_user
 
 # Enable logging
 logging.basicConfig(
@@ -90,6 +91,12 @@ def _force_reply_msg(user, body: str, bold: str, suffix: str) -> tuple[str, list
     ]
 
 
+def _first_name(name: str) -> str:
+    """Return the part of a name before the first whitespace, symbol, or punctuation."""
+    m = re.match(r"[^\s\W]+", name, re.UNICODE)
+    return m.group(0) if m else name
+
+
 _NO_DEFAULT_LIST_MSG = "No default list set. Open /lb, pick a list, and tap ⭐ Default."
 
 
@@ -134,11 +141,11 @@ async def _do_draw(bot, chat_id: int, list_name: str, user_name: str, thread_id:
     prompt = draw_random_prompt(chat_id, list_name)
     if not prompt:
         return False
-    added_by = prompt["added_by_name"] or ""
+    added_by = _first_name(prompt["added_by_name"]) if prompt["added_by_name"] else ""
     author_line = f"\n<i>added by <tg-spoiler>{added_by}</tg-spoiler></i>" if added_by else ""
     await _notify(
         bot, chat_id,
-        f"🎲 <b>{user_name}</b> drew from <b>{list_name}</b>:\n<blockquote>{prompt['text']}</blockquote>{author_line}",
+        f"🎲 <b>{_first_name(user_name)}</b> drew from <b>{list_name}</b>:\n<blockquote>{prompt['text']}</blockquote>{author_line}",
         thread_id,
     )
     return True
@@ -203,7 +210,7 @@ async def button_handler(update: Update, context: ContextTypes.DEFAULT_TYPE) -> 
         if not s:
             await query.answer("List not found.", show_alert=True)
             return
-        user_lines = "\n".join(f"  • {r['name']} — {r['count']}" for r in s["by_user"])
+        user_lines = "\n".join(f"  • {_first_name(r['name'])} — {r['count']}" for r in s["by_user"])
         most = f'_{s["most_drawn"]["text"]}_ ({s["most_drawn"]["count"]}×)' if s["most_drawn"] else "—"
         stats_text = (
             f"*{list_name} — Stats*\n\n"
@@ -270,11 +277,12 @@ async def reply_handler(update: Update, context: ContextTypes.DEFAULT_TYPE) -> N
     if state["action"] == "add":
         list_name = state["list_name"]
         user_name = msg.from_user.full_name if msg.from_user else ""
-        position = add_prompt(chat_id, list_name, user_text, added_by_name=user_name)
+        upsert_user(msg.from_user.id, user_name)
+        position = add_prompt(chat_id, list_name, user_text, added_by_id=msg.from_user.id)
         await _cleanup_reply_messages(context.bot, chat_id, prompt_msg_id, msg.message_id)
         await _notify(
             context.bot, chat_id,
-            f"✅ <b>{user_name}</b> <i>added #{position} to {list_name}</i>:\n<blockquote>{user_text}</blockquote>",
+            f"✅ <b>{_first_name(user_name)}</b> <i>added #{position} to {list_name}</i>:\n<blockquote>{user_text}</blockquote>",
             msg.message_thread_id,
         )
         await context.bot.delete_message(chat_id, panel_msg_id)
@@ -311,7 +319,7 @@ async def reply_handler(update: Update, context: ContextTypes.DEFAULT_TYPE) -> N
         if updated:
             await _notify(
                 context.bot, chat_id,
-                f"✏️ <b>{user_name}</b> <i>edited #{position} in {list_name}</i>:\n<blockquote>{new_text}</blockquote>",
+                f"✏️ <b>{_first_name(user_name)}</b> <i>edited #{position} in {list_name}</i>:\n<blockquote>{new_text}</blockquote>",
                 msg.message_thread_id,
             )
         else:
@@ -351,11 +359,12 @@ async def add_command(update: Update, context: ContextTypes.DEFAULT_TYPE) -> Non
         await update.message.reply_text("Usage: `/add <item text>`", parse_mode="Markdown")
         return
     user_name = update.message.from_user.full_name if update.message.from_user else ""
-    position = add_prompt(chat_id, list_name, text, added_by_name=user_name)
+    upsert_user(update.message.from_user.id, user_name)
+    position = add_prompt(chat_id, list_name, text, added_by_id=update.message.from_user.id)
     await update.message.delete()
     await _notify(
         context.bot, chat_id,
-        f"✅ <b>{user_name}</b> <i>added #{position} to {list_name}</i>:\n<blockquote>{text}</blockquote>",
+        f"✅ <b>{_first_name(user_name)}</b> <i>added #{position} to {list_name}</i>:\n<blockquote>{text}</blockquote>",
         update.message.message_thread_id,
     )
 
