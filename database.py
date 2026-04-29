@@ -3,12 +3,13 @@
 
 import sqlite3
 import logging
+import os
 import random
 from pathlib import Path
 
 logger = logging.getLogger(__name__)
 
-DB_PATH = Path("listbot.db")
+DB_PATH = Path(os.environ.get("DATA_DIR", ".")) / "listbot.db"
 
 
 def get_connection() -> sqlite3.Connection:

@@ -2,6 +2,7 @@
 """Modern Telegram bot for managing writing prompt lists."""
 
 import logging
+import os
 import sys
 from pathlib import Path
 from telegram.ext import Application, CommandHandler, CallbackQueryHandler, MessageHandler, filters, ContextTypes
@@ -17,10 +18,14 @@ logger = logging.getLogger(__name__)
 
 
 def load_token() -> str:
-    """Load bot token from token.txt file."""
+    """Load bot token from BOT_TOKEN env var or token.txt file."""
+    token = os.environ.get("BOT_TOKEN", "").strip()
+    if token:
+        return token
+
     token_path = Path("token.txt")
     if not token_path.exists():
-        logger.error("token.txt not found. Please create it based on example.token.txt")
+        logger.error("token.txt not found and BOT_TOKEN env var not set")
         sys.exit(1)
 
     token = token_path.read_text(encoding="utf-8").strip()
