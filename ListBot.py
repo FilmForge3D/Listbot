@@ -1,6 +1,7 @@
 #!/usr/bin/env python3
 """Modern Telegram bot for managing writing prompt lists."""
 
+import argparse
 import logging
 import os
 import re
@@ -9,6 +10,7 @@ from pathlib import Path
 from telegram.ext import Application, CommandHandler, CallbackQueryHandler, MessageHandler, filters, ContextTypes
 from telegram import Update, InlineKeyboardButton, InlineKeyboardMarkup, ForceReply, MessageEntity
 from telegram.error import TimedOut
+from strings import load_locale, t
 from database import (
     init_db, get_list_names, get_prompts, draw_random_prompt, add_prompt,
     edit_prompt, remove_prompt, rename_list, delete_list, get_stats,
@@ -50,7 +52,7 @@ def _render_lists_view(chat_id: int, title: str) -> tuple[str, InlineKeyboardMar
     shared = get_shared_lists(chat_id)
     default = get_default_list(chat_id)
     has_any = bool(owned or shared)
-    text = f"*{title}*\n\nYour lists:" if has_any else f"*{title}*\n\nNo lists yet. Create one!"
+    text = f"*{title}*\n\n{t('panel_your_lists')}" if has_any else f"*{title}*\n\n{t('panel_no_lists')}"
     buttons: list[list[InlineKeyboardButton]] = []
     row: list[InlineKeyboardButton] = []
     for name in owned:
@@ -68,7 +70,7 @@ def _render_lists_view(chat_id: int, title: str) -> tuple[str, InlineKeyboardMar
             row = []
     if row:
         buttons.append(row)
-    buttons.append([InlineKeyboardButton("➕ New List", callback_data="new_list")])
+    buttons.append([InlineKeyboardButton(t("btn_new_list"), callback_data="new_list")])
     return text, InlineKeyboardMarkup(buttons)
 
 
@@ -77,18 +79,18 @@ def _render_list_view(chat_id: int, list_name: str, note: str = "") -> tuple[str
     prompts = get_prompts(chat_id, list_name)
     total = len(prompts)
     drawn = sum(1 for p in prompts if p["drawn"])
-    header = f"*{list_name}*  ({total} items, {drawn} drawn)"
+    header = f"*{list_name}*  {t('panel_list_header', total=total, drawn=drawn)}"
     text = f"{header}\n\n{note}" if note else header
     markup = InlineKeyboardMarkup([
-        [InlineKeyboardButton("🎲 Draw", callback_data=f"draw:{list_name}"),
-         InlineKeyboardButton("➕ Add", callback_data=f"add:{list_name}")],
-        [InlineKeyboardButton("🗑 Remove", callback_data=f"remove:{list_name}"),
-         InlineKeyboardButton("✏️ Edit", callback_data=f"edit:{list_name}"),
-         InlineKeyboardButton("📋 View", callback_data=f"list:{list_name}:0")],
-        [InlineKeyboardButton("📊 Stats", callback_data=f"stats:{list_name}"),
-         InlineKeyboardButton("⭐ Default", callback_data=f"set_default:{list_name}"),
-         InlineKeyboardButton("👥 Share", callback_data=f"share:{list_name}")],
-        [InlineKeyboardButton("← Back", callback_data="back")],
+        [InlineKeyboardButton(t("btn_draw"), callback_data=f"draw:{list_name}"),
+         InlineKeyboardButton(t("btn_add"), callback_data=f"add:{list_name}")],
+        [InlineKeyboardButton(t("btn_remove"), callback_data=f"remove:{list_name}"),
+         InlineKeyboardButton(t("btn_edit"), callback_data=f"edit:{list_name}"),
+         InlineKeyboardButton(t("btn_view"), callback_data=f"list:{list_name}:0")],
+        [InlineKeyboardButton(t("btn_stats"), callback_data=f"stats:{list_name}"),
+         InlineKeyboardButton(t("btn_default"), callback_data=f"set_default:{list_name}"),
+         InlineKeyboardButton(t("btn_share"), callback_data=f"share:{list_name}")],
+        [InlineKeyboardButton(t("btn_back"), callback_data="back")],
     ])
     return text, markup
 
@@ -107,32 +109,32 @@ def _render_share_panel(chat_id: int, list_name: str, owner_chat_id: int) -> tup
     def _fmt_guest(g: int) -> str:
         n = lookup_name(g)
         return f"  • {n} (`{g}`)" if n else f"  • `{g}`"
-    guest_lines = "\n".join(_fmt_guest(g) for g in guests) if guests else "  _none_"
-    role = "Owner" if is_owner else "Guest"
+    guest_lines = "\n".join(_fmt_guest(g) for g in guests) if guests else t("share_no_guests")
+    role = t("share_role_owner") if is_owner else t("share_role_guest")
     owner_label = lookup_name(owner_chat_id)
     owner_str = f"{owner_label} (`{owner_chat_id}`)" if owner_label else f"`{owner_chat_id}`"
-    owner_line = "" if is_owner else f"Owner: {owner_str}\n"
+    owner_line = "" if is_owner else t("share_owner_line", owner=owner_str)
     text = (
-        f"*{list_name} — Sharing*\n\n"
-        f"Your chat ID: `{chat_id}`\n"
-        f"Your role: {role}\n"
+        f"*{t('share_title', list_name=list_name)}*\n\n"
+        f"{t('share_your_id', chat_id=chat_id)}\n"
+        f"{t('share_role_label', role=role)}\n"
         f"{owner_line}\n"
-        f"Shared with:\n{guest_lines}"
+        f"{t('share_guests_header')}\n{guest_lines}"
     )
     buttons: list[list[InlineKeyboardButton]] = []
     if is_owner:
         buttons.append([
-            InlineKeyboardButton("➕ Invite", callback_data=f"share_invite:{list_name}"),
-            InlineKeyboardButton("➖ Remove guest", callback_data=f"share_remove:{list_name}"),
+            InlineKeyboardButton(t("btn_invite"), callback_data=f"share_invite:{list_name}"),
+            InlineKeyboardButton(t("btn_remove_guest"), callback_data=f"share_remove:{list_name}"),
         ])
         buttons.append([
-            InlineKeyboardButton("🔁 Transfer ownership", callback_data=f"share_transfer:{list_name}"),
+            InlineKeyboardButton(t("btn_transfer"), callback_data=f"share_transfer:{list_name}"),
         ])
     else:
         buttons.append([
-            InlineKeyboardButton("🚪 Leave list", callback_data=f"share_leave:{list_name}"),
+            InlineKeyboardButton(t("btn_leave"), callback_data=f"share_leave:{list_name}"),
         ])
-    buttons.append([InlineKeyboardButton("← Back", callback_data=f"open:{list_name}")])
+    buttons.append([InlineKeyboardButton(t("btn_back"), callback_data=f"open:{list_name}")])
     return text, InlineKeyboardMarkup(buttons)
 
 
@@ -141,15 +143,18 @@ async def _notify(bot, chat_id: int, text: str, thread_id: int | None) -> None:
     await bot.send_message(chat_id, text, parse_mode="HTML", message_thread_id=thread_id)
 
 
-def _force_reply_msg(user, body: str, bold: str, suffix: str) -> tuple[str, list[MessageEntity]]:
+def _force_reply_msg(user, body: str, bold_text: str) -> tuple[str, list[MessageEntity]]:
     """Build plain text + entities for a selective ForceReply prompt."""
     name = user.full_name
-    prefix = f"{name}, {body}"
-    text = f"{prefix}{bold}{suffix}"
-    return text, [
+    text = f"{name}, {body}"
+    entities: list[MessageEntity] = [
         MessageEntity(type=MessageEntity.TEXT_MENTION, offset=0, length=len(name), user=user),
-        MessageEntity(type=MessageEntity.BOLD, offset=len(prefix), length=len(bold)),
     ]
+    if bold_text:
+        offset = text.find(bold_text)
+        if offset >= 0:
+            entities.append(MessageEntity(type=MessageEntity.BOLD, offset=offset, length=len(bold_text)))
+    return text, entities
 
 
 def _first_name(name: str) -> str:
@@ -158,7 +163,6 @@ def _first_name(name: str) -> str:
     return m.group(0) if m else name
 
 
-_NO_DEFAULT_LIST_MSG = "No default list set. Open /lb, pick a list, and tap ⭐ Default."
 
 
 async def _send_force_reply(
@@ -169,14 +173,13 @@ async def _send_force_reply(
     user,
     action: str,
     body: str,
-    bold: str,
-    suffix: str,
+    bold_text: str = "",
     list_name: str | None = None,
 ) -> None:
     """Send a ForceReply prompt and record the pending action in chat_data."""
-    msg_text, entities = _force_reply_msg(user, body, bold, suffix)
+    msg_text, entities = _force_reply_msg(user, body, bold_text)
     prompt_msg = await context.bot.send_message(
-        chat_id, msg_text + "\n/cancel to cancel",
+        chat_id, msg_text + "\n" + t("cancel_hint"),
         reply_markup=ForceReply(selective=True),
         entities=entities,
         message_thread_id=thread_id,
@@ -203,10 +206,10 @@ async def _do_draw(bot, chat_id: int, list_name: str, user_name: str, thread_id:
     if not prompt:
         return False
     added_by = _first_name(prompt["added_by_name"]) if prompt["added_by_name"] else ""
-    author_line = f"\n<i>added by <tg-spoiler>{added_by}</tg-spoiler></i>" if added_by else ""
+    author_line = t("notify_drew_author", added_by=added_by) if added_by else ""
     await _notify(
         bot, notify_chat_id if notify_chat_id is not None else chat_id,
-        f"🎲 <b>{_first_name(user_name)}</b> drew from <b>{list_name}</b>:\n<blockquote>{prompt['text']}</blockquote>{author_line}",
+        t("notify_drew", user=_first_name(user_name), list_name=list_name, text=prompt["text"], author_line=author_line),
         thread_id,
     )
     return True
@@ -240,7 +243,7 @@ async def button_handler(update: Update, context: ContextTypes.DEFAULT_TYPE) -> 
         owner_chat_id = resolve_list_owner(chat_id, list_name) or chat_id
         user_name = query.from_user.full_name if query.from_user else "Someone"
         if not await _do_draw(context.bot, owner_chat_id, list_name, user_name, query.message.message_thread_id, notify_chat_id=chat_id):
-            text, markup = _render_list_view(owner_chat_id, list_name, "⚠️ All items have been drawn.")
+            text, markup = _render_list_view(owner_chat_id, list_name, t("err_all_drawn"))
             await query.edit_message_text(text, reply_markup=markup, parse_mode="Markdown")
             return
         await query.message.delete()
@@ -256,17 +259,17 @@ async def button_handler(update: Update, context: ContextTypes.DEFAULT_TYPE) -> 
         drawn = sum(1 for p in prompts if p["drawn"])
         start = page * PAGE_SIZE
         page_prompts = prompts[start:start + PAGE_SIZE]
-        lines = "\n".join(f"{p['position']}. {p['text']}" for p in page_prompts) or "_Empty_"
+        lines = "\n".join(f"{p['position']}. {p['text']}" for p in page_prompts) or t("panel_empty")
         total_pages = max(1, (total + PAGE_SIZE - 1) // PAGE_SIZE)
-        header = f"*{list_name}*  ({total} items, {drawn} drawn) — page {page + 1}/{total_pages}"
+        header = f"*{list_name}*  {t('panel_list_header_paged', total=total, drawn=drawn, page=page + 1, total_pages=total_pages)}"
         text = f"{header}\n\n{lines}"
         _, base_markup = _render_list_view(owner_chat_id, list_name)
         if total_pages > 1:
             prev_page = (page - 1) % total_pages
             next_page = (page + 1) % total_pages
             nav_row = [
-                InlineKeyboardButton("◀ Prev", callback_data=f"list:{list_name}:{prev_page}"),
-                InlineKeyboardButton("Next ▶", callback_data=f"list:{list_name}:{next_page}"),
+                InlineKeyboardButton(t("btn_prev"), callback_data=f"list:{list_name}:{prev_page}"),
+                InlineKeyboardButton(t("btn_next"), callback_data=f"list:{list_name}:{next_page}"),
             ]
             markup = InlineKeyboardMarkup(list(base_markup.inline_keyboard) + [nav_row])
         else:
@@ -278,17 +281,17 @@ async def button_handler(update: Update, context: ContextTypes.DEFAULT_TYPE) -> 
         owner_chat_id = resolve_list_owner(chat_id, list_name) or chat_id
         s = get_stats(owner_chat_id, list_name)
         if not s:
-            await query.answer("List not found.", show_alert=True)
+            await query.answer(t("err_list_not_found"), show_alert=True)
             return
-        user_lines = "\n".join(f"  • {_first_name(r['name'])} — {r['count']}" for r in s["by_user"])
-        most = f'_{s["most_drawn"]["text"]}_ ({s["most_drawn"]["count"]}×)' if s["most_drawn"] else "—"
+        user_lines = "\n".join(t("stats_user_line", name=_first_name(r["name"]), count=r["count"]) for r in s["by_user"])
+        most = t("stats_most_drawn_fmt", text=s["most_drawn"]["text"], count=s["most_drawn"]["count"]) if s["most_drawn"] else t("stats_most_drawn_none")
         stats_text = (
-            f"*{list_name} — Stats*\n\n"
-            f"📝 Prompts: {s['total']}\n"
-            f"🎲 Total draws: {s['total_draws']}\n"
-            f"😴 Never drawn: {s['never_drawn']}\n"
-            f"🏆 Most drawn: {most}\n\n"
-            f"👤 Prompts by user:\n{user_lines or '  —'}"
+            f"*{t('stats_title', list_name=list_name)}*\n\n"
+            f"{t('stats_prompts', total=s['total'])}\n"
+            f"{t('stats_draws', total_draws=s['total_draws'])}\n"
+            f"{t('stats_never_drawn', never_drawn=s['never_drawn'])}\n"
+            f"{t('stats_most_drawn', most=most)}\n\n"
+            f"{t('stats_by_user')}\n{user_lines or t('stats_no_users')}"
         )
         _, markup = _render_list_view(owner_chat_id, list_name)
         await query.edit_message_text(stats_text, reply_markup=markup, parse_mode="Markdown")
@@ -298,50 +301,50 @@ async def button_handler(update: Update, context: ContextTypes.DEFAULT_TYPE) -> 
         owner_chat_id = resolve_list_owner(chat_id, list_name) or chat_id
         if not get_prompts(owner_chat_id, list_name):
             markup = InlineKeyboardMarkup([[
-                InlineKeyboardButton("🗑 Delete list", callback_data=f"delete_list_confirm:{list_name}"),
-                InlineKeyboardButton("↩️ Back", callback_data=f"open:{list_name}"),
+                InlineKeyboardButton(t("btn_delete_list"), callback_data=f"delete_list_confirm:{list_name}"),
+                InlineKeyboardButton(t("btn_back_cancel"), callback_data=f"open:{list_name}"),
             ]])
             await query.edit_message_text(
-                f"*{list_name}* is empty. Delete the list?", reply_markup=markup, parse_mode="Markdown"
+                t("confirm_delete_prompt", list_name=list_name), reply_markup=markup, parse_mode="Markdown"
             )
             return
         await _send_force_reply(
             context, chat_id, query.message.message_thread_id, query.message.message_id,
-            query.from_user, "remove", "reply with the position number to remove from ", list_name, ":",
-            list_name=list_name,
+            query.from_user, "remove", t("fr_remove_body", list_name=list_name),
+            list_name, list_name=list_name,
         )
 
     elif data.startswith("edit:"):
         list_name = data[5:]
         await _send_force_reply(
             context, chat_id, query.message.message_thread_id, query.message.message_id,
-            query.from_user, "edit", "reply with <pos> <text> to edit, or rename <name> to rename ", list_name, ":",
-            list_name=list_name,
+            query.from_user, "edit", t("fr_edit_body", list_name=list_name),
+            list_name, list_name=list_name,
         )
 
     elif data.startswith("add:"):
         list_name = data[4:]
         await _send_force_reply(
             context, chat_id, query.message.message_thread_id, query.message.message_id,
-            query.from_user, "add", "reply with the item to add to ", list_name, ":",
-            list_name=list_name,
+            query.from_user, "add", t("fr_add_body", list_name=list_name),
+            list_name, list_name=list_name,
         )
 
     elif data.startswith("set_default:"):
         list_name = data[12:]
         set_default_list(chat_id, list_name)
         owner_chat_id = resolve_list_owner(chat_id, list_name) or chat_id
-        text, markup = _render_list_view(owner_chat_id, list_name, f"⭐ *{list_name}* is now the default list.")
+        text, markup = _render_list_view(owner_chat_id, list_name, t("confirm_set_default", list_name=list_name))
         await query.edit_message_text(text, reply_markup=markup, parse_mode="Markdown")
 
     elif data.startswith("delete_list_confirm:"):
         list_name = data[20:]
         owner_chat_id = resolve_list_owner(chat_id, list_name) or chat_id
         if delete_list(owner_chat_id, list_name):
-            text, markup = _render_lists_view(chat_id, f"🗑 *{list_name}* deleted.")
+            text, markup = _render_lists_view(chat_id, t("confirm_list_deleted", list_name=list_name))
             await query.edit_message_text(text, reply_markup=markup, parse_mode="Markdown")
         else:
-            text, markup = _render_list_view(owner_chat_id, list_name, "⚠️ Cannot delete: list is not empty.")
+            text, markup = _render_list_view(owner_chat_id, list_name, t("err_cannot_delete"))
             await query.edit_message_text(text, reply_markup=markup, parse_mode="Markdown")
 
     elif data.startswith("share:"):
@@ -354,24 +357,24 @@ async def button_handler(update: Update, context: ContextTypes.DEFAULT_TYPE) -> 
         list_name = data[13:]
         await _send_force_reply(
             context, chat_id, query.message.message_thread_id, query.message.message_id,
-            query.from_user, "share_invite", f"your chat ID is `{chat_id}` — reply with the chat ID to invite to ", list_name, ":",
-            list_name=list_name,
+            query.from_user, "share_invite", t("fr_invite_body", chat_id=chat_id, list_name=list_name),
+            list_name, list_name=list_name,
         )
 
     elif data.startswith("share_remove:"):
         list_name = data[13:]
         await _send_force_reply(
             context, chat_id, query.message.message_thread_id, query.message.message_id,
-            query.from_user, "share_remove", "reply with the chat ID to remove from ", list_name, ":",
-            list_name=list_name,
+            query.from_user, "share_remove", t("fr_remove_guest_body", list_name=list_name),
+            list_name, list_name=list_name,
         )
 
     elif data.startswith("share_transfer:"):
         list_name = data[15:]
         await _send_force_reply(
             context, chat_id, query.message.message_thread_id, query.message.message_id,
-            query.from_user, "share_transfer", "reply with the chat ID to transfer ownership of ", list_name, " to:",
-            list_name=list_name,
+            query.from_user, "share_transfer", t("fr_transfer_body", list_name=list_name),
+            list_name, list_name=list_name,
         )
 
     elif data.startswith("share_leave:"):
@@ -392,7 +395,7 @@ async def button_handler(update: Update, context: ContextTypes.DEFAULT_TYPE) -> 
     elif data == "new_list":
         await _send_force_reply(
             context, chat_id, query.message.message_thread_id, query.message.message_id,
-            query.from_user, "new_list", "reply with the name for the new list", "", ":",
+            query.from_user, "new_list", t("fr_new_list_body"),
         )
 
 
@@ -419,7 +422,7 @@ async def reply_handler(update: Update, context: ContextTypes.DEFAULT_TYPE) -> N
         await _cleanup_reply_messages(context.bot, chat_id, prompt_msg_id, msg.message_id)
         await _notify(
             context.bot, chat_id,
-            f"✅ <b>{_first_name(user_name)}</b> <i>added #{position} to {list_name}</i>:\n<blockquote>{user_text}</blockquote>",
+            t("notify_added", user=_first_name(user_name), position=position, list_name=list_name, text=user_text),
             msg.message_thread_id,
         )
         await context.bot.delete_message(chat_id, panel_msg_id)
@@ -429,16 +432,13 @@ async def reply_handler(update: Update, context: ContextTypes.DEFAULT_TYPE) -> N
         owner_chat_id = resolve_list_owner(chat_id, list_name) or chat_id
         if not user_text.isdigit():
             await _cleanup_reply_messages(context.bot, chat_id, prompt_msg_id, msg.message_id)
-            text, markup = _render_list_view(owner_chat_id, list_name, "⚠️ Please reply with a position number.")
+            text, markup = _render_list_view(owner_chat_id, list_name, t("err_not_a_number"))
             await context.bot.edit_message_text(text, chat_id=chat_id, message_id=panel_msg_id, reply_markup=markup, parse_mode="Markdown")
             return
         position = int(user_text)
         removed = remove_prompt(owner_chat_id, list_name, position)
         await _cleanup_reply_messages(context.bot, chat_id, prompt_msg_id, msg.message_id)
-        if removed:
-            note = f"🗑 Position {position} removed:\n<blockquote>{removed['text']}</blockquote>"
-        else:
-            note = f"⚠️ No item at position {position}."
+        note = t("notify_removed", position=position, text=removed["text"]) if removed else t("err_no_item_at", position=position)
         await _notify(context.bot, chat_id, note, msg.message_thread_id)
         await context.bot.delete_message(chat_id, panel_msg_id)
 
@@ -450,21 +450,21 @@ async def reply_handler(update: Update, context: ContextTypes.DEFAULT_TYPE) -> N
             new_name = parts[1].strip() if len(parts) > 1 else ""
             await _cleanup_reply_messages(context.bot, chat_id, prompt_msg_id, msg.message_id)
             if not new_name:
-                text, markup = _render_list_view(owner_chat_id, list_name, "⚠️ Format must be: `rename <new name>`")
+                text, markup = _render_list_view(owner_chat_id, list_name, t("err_rename_format"))
                 await context.bot.edit_message_text(text, chat_id=chat_id, message_id=panel_msg_id, reply_markup=markup, parse_mode="Markdown")
                 return
             renamed = rename_list(owner_chat_id, list_name, new_name)
             if renamed:
-                await _notify(context.bot, chat_id, f"✏️ List <b>{list_name}</b> renamed to <b>{new_name}</b>.", msg.message_thread_id)
+                await _notify(context.bot, chat_id, t("notify_renamed", old_name=list_name, new_name=new_name), msg.message_thread_id)
                 text, markup = _render_list_view(owner_chat_id, new_name)
                 await context.bot.edit_message_text(text, chat_id=chat_id, message_id=panel_msg_id, reply_markup=markup, parse_mode="Markdown")
             else:
-                text, markup = _render_list_view(owner_chat_id, list_name, f"⚠️ A list named *{new_name}* already exists.")
+                text, markup = _render_list_view(owner_chat_id, list_name, t("err_rename_exists", name=new_name))
                 await context.bot.edit_message_text(text, chat_id=chat_id, message_id=panel_msg_id, reply_markup=markup, parse_mode="Markdown")
             return
         if len(parts) < 2 or not parts[0].isdigit():
             await _cleanup_reply_messages(context.bot, chat_id, prompt_msg_id, msg.message_id)
-            text, markup = _render_list_view(owner_chat_id, list_name, "⚠️ Format must be: `<position> <new text>`")
+            text, markup = _render_list_view(owner_chat_id, list_name, t("err_edit_format"))
             await context.bot.edit_message_text(text, chat_id=chat_id, message_id=panel_msg_id, reply_markup=markup, parse_mode="Markdown")
             return
         position, new_text = int(parts[0]), parts[1].strip()
@@ -474,16 +474,16 @@ async def reply_handler(update: Update, context: ContextTypes.DEFAULT_TYPE) -> N
         if updated:
             await _notify(
                 context.bot, chat_id,
-                f"✏️ <b>{_first_name(user_name)}</b> <i>edited #{position} in {list_name}</i>:\n<blockquote>{new_text}</blockquote>",
+                t("notify_edited", user=_first_name(user_name), position=position, list_name=list_name, text=new_text),
                 msg.message_thread_id,
             )
         else:
-            await _notify(context.bot, chat_id, f"⚠️ No item at position {position}.", msg.message_thread_id)
+            await _notify(context.bot, chat_id, t("err_no_item_at", position=position), msg.message_thread_id)
         await context.bot.delete_message(chat_id, panel_msg_id)
 
     elif state["action"] == "new_list":
         list_name = user_text
-        text, markup = _render_list_view(chat_id, list_name, "✅ List created! Tap ➕ Add to start filling it.")
+        text, markup = _render_list_view(chat_id, list_name, t("confirm_list_created"))
         await _cleanup_reply_messages(context.bot, chat_id, prompt_msg_id, msg.message_id)
         await context.bot.edit_message_text(text, chat_id=chat_id, message_id=panel_msg_id, reply_markup=markup, parse_mode="Markdown")
 
@@ -500,9 +500,9 @@ async def reply_handler(update: Update, context: ContextTypes.DEFAULT_TYPE) -> N
         with get_connection() as conn:
             row = conn.execute("SELECT id FROM lists WHERE chat_id=? AND list_name=?", (owner_chat_id, list_name)).fetchone()
         if row and add_list_share(row["id"], guest_id):
-            note = f"✅ Chat `{guest_id}` can now access *{list_name}*."
+            note = t("confirm_invite_ok", chat_id=guest_id, list_name=list_name)
         else:
-            note = f"⚠️ Could not invite `{guest_id}` (already shared or list not found)."
+            note = t("err_invite_failed", chat_id=guest_id)
         text, markup = _render_share_panel(chat_id, list_name, owner_chat_id)
         await context.bot.edit_message_text(f"{note}\n\n{text}", chat_id=chat_id, message_id=panel_msg_id, reply_markup=markup, parse_mode="Markdown")
 
@@ -519,9 +519,9 @@ async def reply_handler(update: Update, context: ContextTypes.DEFAULT_TYPE) -> N
         with get_connection() as conn:
             row = conn.execute("SELECT id FROM lists WHERE chat_id=? AND list_name=?", (owner_chat_id, list_name)).fetchone()
         if row and remove_list_share(row["id"], guest_id):
-            note = f"✅ Chat `{guest_id}` removed from *{list_name}*."
+            note = t("confirm_remove_guest_ok", chat_id=guest_id, list_name=list_name)
         else:
-            note = f"⚠️ Chat `{guest_id}` was not in the share list."
+            note = t("err_remove_guest_failed", chat_id=guest_id)
         text, markup = _render_share_panel(chat_id, list_name, owner_chat_id)
         await context.bot.edit_message_text(f"{note}\n\n{text}", chat_id=chat_id, message_id=panel_msg_id, reply_markup=markup, parse_mode="Markdown")
 
@@ -538,10 +538,10 @@ async def reply_handler(update: Update, context: ContextTypes.DEFAULT_TYPE) -> N
         with get_connection() as conn:
             row = conn.execute("SELECT id FROM lists WHERE chat_id=? AND list_name=?", (owner_chat_id, list_name)).fetchone()
         if row and transfer_list_ownership(row["id"], new_owner_id):
-            note = f"🔁 Ownership of *{list_name}* transferred to `{new_owner_id}`. You are now a guest."
+            note = t("confirm_transfer_ok", list_name=list_name, new_owner=new_owner_id)
             text, markup = _render_share_panel(chat_id, list_name, new_owner_id)
         else:
-            note = f"⚠️ Could not transfer to `{new_owner_id}` (not a guest or list not found)."
+            note = t("err_transfer_failed", chat_id=new_owner_id)
             text, markup = _render_share_panel(chat_id, list_name, owner_chat_id)
         await context.bot.edit_message_text(f"{note}\n\n{text}", chat_id=chat_id, message_id=panel_msg_id, reply_markup=markup, parse_mode="Markdown")
 
@@ -583,12 +583,12 @@ async def draw_command(update: Update, context: ContextTypes.DEFAULT_TYPE) -> No
     chat_id = update.effective_chat.id
     list_name = get_default_list(chat_id)
     if not list_name:
-        await update.message.reply_text(_NO_DEFAULT_LIST_MSG, parse_mode="Markdown")
+        await update.message.reply_text(t("err_no_default"), parse_mode="Markdown")
         return
     owner_chat_id = resolve_list_owner(chat_id, list_name) or chat_id
     user_name = update.message.from_user.full_name if update.message.from_user else "Someone"
     if not await _do_draw(context.bot, owner_chat_id, list_name, user_name, update.message.message_thread_id, notify_chat_id=chat_id):
-        await update.message.reply_text(f"*{list_name}* is empty.", parse_mode="Markdown")
+        await update.message.reply_text(t("err_list_empty", list_name=list_name), parse_mode="Markdown")
         return
     await update.message.delete()
 
@@ -598,11 +598,11 @@ async def add_command(update: Update, context: ContextTypes.DEFAULT_TYPE) -> Non
     chat_id = update.effective_chat.id
     list_name = get_default_list(chat_id)
     if not list_name:
-        await update.message.reply_text(_NO_DEFAULT_LIST_MSG, parse_mode="Markdown")
+        await update.message.reply_text(t("err_no_default"), parse_mode="Markdown")
         return
     text = " ".join(context.args).strip() if context.args else ""
     if not text:
-        await update.message.reply_text("Usage: `/add <item text>`", parse_mode="Markdown")
+        await update.message.reply_text(t("err_add_usage"), parse_mode="Markdown")
         return
     owner_chat_id = resolve_list_owner(chat_id, list_name) or chat_id
     user_name = update.message.from_user.full_name if update.message.from_user else ""
@@ -611,7 +611,7 @@ async def add_command(update: Update, context: ContextTypes.DEFAULT_TYPE) -> Non
     await update.message.delete()
     await _notify(
         context.bot, chat_id,
-        f"✅ <b>{_first_name(user_name)}</b> <i>added #{position} to {list_name}</i>:\n<blockquote>{text}</blockquote>",
+        t("notify_added", user=_first_name(user_name), position=position, list_name=list_name, text=text),
         update.message.message_thread_id,
     )
 
@@ -631,34 +631,15 @@ async def show_panel(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None
 async def help_command(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
     """Send a help message when /help is issued."""
     chat_id = update.effective_chat.id
-    help_text = (
-        "<b>ListBot — Help</b>\n\n"
-        "<b>Commands</b>\n"
-        "/lb — Open the interactive list panel\n"
-        "/draw — Draw a random item from your default list\n"
-        "/add &lt;text&gt; — Add an item to your default list\n"
-        "/cancel — Cancel a pending add/edit/remove prompt\n"
-        "/help — Show this message\n\n"
-        "<b>Panel actions</b>\n"
-        "🎲 Draw — Pick a random item\n"
-        "➕ Add — Add an item\n"
-        "🗑 Remove — Remove an item by position\n"
-        "✏️ Edit — Edit an item or rename the list\n"
-        "📋 View — Browse all items\n"
-        "📊 Stats — Draw counts and contributor breakdown\n"
-        "⭐ Default — Set as the default list for /draw and /add\n"
-        "👥 Share — Invite another chat to access this list\n\n"
-        "<b>Sharing</b>\n"
-        "To share a list with another chat, go to 👥 Share → ➕ Invite "
-        "and enter their chat ID. They need to share their ID with you — "
-        "they can find it here or in their own /help.\n\n"
-        f"<b>This chat's ID:</b> <code>{chat_id}</code>"
-    )
-    await update.message.reply_text(help_text, parse_mode="HTML")
+    await update.message.reply_text(t("help_text", chat_id=chat_id), parse_mode="HTML")
 
 
 def main() -> None:
     """Start the bot."""
+    parser = argparse.ArgumentParser()
+    parser.add_argument("--lang", default="", help="Locale to use (default: BOT_LANG env var or 'en')")
+    args = parser.parse_args()
+    load_locale(args.lang)
     init_db()
     token = load_token()
     # Create the Application
