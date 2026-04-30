@@ -4,80 +4,58 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 ## Project Overview
 
-**Listbot** is a project for managing and analyzing writing prompt lists via Telegram:
+**Listbot** is a Telegram bot for managing writing prompt lists in group chats, plus tooling to migrate data from the legacy bot.
 
-1. **ListBot.old.py** — A Telegram bot (v0.1.6) that manages multiple persistent lists in group chats, supporting add/remove/draw/edit operations with separate draw tracking. Works up to Python Telegram Bot 13.14
+1. **ListBot.py** — The active bot. Manages named prompt lists per chat with inline-keyboard UI, SQLite persistence, localization, and Docker deployment support.
 
-2. **ListBot.py** — The Modern recreation of the old project.
+2. **database.py** — SQLite data layer (lists, prompts, users, shares).
 
-3. **Nachricht extrahieren/extract_telegram.py** — A modern utility for extracting and deduplicating messages from Telegram Chats that have the Bot as part of them. It will be used to migrate the database from the old Bot to the new.
+3. **strings.py** + **locales/** — Localization system (English + German).
+
+4. **Nachricht extrahieren/extract_telegram.py** — Extracts and deduplicates ListBot messages from Telegram chat exports (used for migration from the legacy bot).
+
+5. **Nachricht extrahieren/import_json.py** — Imports extracted prompt data into the ListBot SQLite database.
 
 ## Project Structure
 
 ```
 Listbot/
-├── ListBot.old.py                  # Original Telegram bot (version 0.1.6, archived)
-├── ListBot.py                      # Modern recreation of the bot
-├── Nachricht extrahieren/          # Modern message extraction subdirectory
-│   ├── extract_telegram.py         # Primary extraction/analysis script for migration
+├── ListBot.py                      # Active Telegram bot (python-telegram-bot 22.x)
+├── database.py                     # SQLite data layer
+├── strings.py                      # Localization loader
+├── locales/
+│   ├── en.json                     # English strings
+│   └── de.json                     # German strings
+├── Dockerfile                      # Container image definition
+├── docker-compose.yml              # Compose deployment config
+├── requirements.txt                # Python dependencies
+├── example.token.txt               # Token file template
+├── token.txt                       # Bot token (gitignored)
+├── listbot.db                      # SQLite database (gitignored)
+├── Listbot.code-workspace          # VS Code workspace
+├── Nachricht extrahieren/          # Migration tooling
+│   ├── extract_telegram.py         # Extracts messages from Telegram export JSON
+│   ├── import_json.py              # Imports extracted data into listbot.db
 │   ├── result.json                 # Sample Telegram export input
-│   ├── ergebnis.json               # Example output
-│   └── venv/                       # Python 3.12 virtual environment
-├── .gitignore                      # Gitignore
-└── CLAUDE.md                       # This file
+│   └── ergebnis.json               # Example extraction output
+├── venv/                           # Python 3.12 virtual environment
+├── .gitignore
+└── CLAUDE.md
 ```
+
+## Repository Plans
+
+The bot (`ListBot.py`, `database.py`, `strings.py`, `locales/`, `Dockerfile`, `docker-compose.yml`, `requirements.txt`) will be made **public**. The migration tooling (`Nachricht extrahieren/`) will be moved to a **private branch**, as it was only ever used for a single deployment and is not relevant to general users.
 
 ## Migration Strategy
 
-The project is transitioning from the legacy bot to a modern implementation:
+The legacy bot stored data in pickle files. Migration pipeline:
 
-1. **Export**: Use `extract_telegram.py` to extract ListBot messages from Telegram group exports
-2. **Transform**: Parse the extracted data to reconstruct the writing prompt lists
-3. **Load**: Migrate the lists into the new ListBot.py's database format
+1. **Export**: Use `extract_telegram.py` to extract ListBot messages from Telegram group JSON exports
+2. **Transform**: Script deduplicates and parses `/add`/`/grupp` commands to reconstruct list state
+3. **Load**: Use `import_json.py` to insert extracted prompts into `listbot.db`
 
-The extraction tool handles deduplication and message parsing to ensure data integrity during the migration.
-
-## Component 1: ListBot.old.py (Legacy Bot)
-
-**Status**: Archived/legacy. Uses deprecated `python-telegram-bot` API (`Updater`, `CommandHandler` from `telegram.ext`).
-
-### Key Architecture
-
-- **Chat-scoped persistence**: Lists stored per chat ID in `./lists/` directory using Python pickle format
-- **Three independent lists**: Primary, list2, list3 (suffix-based file naming)
-- **Drawn tracking**: Separate pickle files track "drawn" entries with archival (`.drawn_old` backups)
-- **Command-driven**: 19 slash commands tripled for 3 lists (/add, /add2, /add3, etc.)
-- **Message deletion**: Automatically deletes user commands and bot confirmations to keep chats clean
-
-### Core Patterns
-
-- **List loading**: Wrapped in try-except to gracefully handle missing lists
-- **Message splitting**: Commands parsed by whitespace with validation (e.g., `/add item name`)
-- **Drawn state**: Stores indices; must sync with list file (deleting list item #5 doesn't auto-update drawn list)
-- **Message length limits**: Breaks output at 3584 chars (Telegram limit), continues with "Use '/list N' to continue"
-- **Pickle protocol**: Lists stored as Python lists (serialized with pickle). Not human-readable or portable.
-
-### Command Groups
-
-| Command Class | Purpose | Variants |
-|---|---|---|
-| `/add{,2,3}` | Add item to list | 3 lists |
-| `/grupp{,2,3}` | German "group" variant (same as add) | 3 lists |
-| `/list{,2,3}` | Show full list or subset by start number | 3 lists |
-| `/list{,2,3} drawn` | Show only drawn entries | 3 lists |
-| `/draw{,2,3} [count]` | Draw N random entries (default 1) | 3 lists |
-| `/remove{,2,3} {number\|drawn}` | Remove single item or all drawn | 3 lists |
-| `/undraw{,2,3} {number\|all}` | Clear draw marker from entries | 3 lists |
-| `/edit{,2,3} number newtext` | Replace list entry | 3 lists |
-| `/reset{,2,3}` | Archive and clear list (requires confirmation) | 3 lists |
-| `/help` | Bot instructions | 1 |
-| `/getid` | Return chat ID | 1 |
-
-### Hardcoded Bot Token
-
-⚠️ **Security note**: Line 1780 contains a plaintext Telegram bot token. This is archived code; treat as exposed.
-
-## Component 2: extract_telegram.py (Modern Utility)
+## Component 1: extract_telegram.py (Migration — Extraction)
 
 **Status**: Active. Modern Python 3.12 script for message analysis.
 
@@ -108,62 +86,56 @@ Input follows Telegram's official export JSON:
 - Each message: `id`, `type` ("message" or "service"), `date`, `date_unixtime`, `from`, `text`
 - **Text variants**: Can be string or list of mixed strings and entity objects (Telegram's rich-text format)
 
-## Component 3: ListBot.py (Modern Bot)
+## Component 2: import_json.py (Migration — Import)
 
-**Status**: Under development. Modern recreation of ListBot.old.py using current `python-telegram-bot` library (v20+).
+Reads the JSON output from `extract_telegram.py` and upserts prompts into `listbot.db` via `database.py`. Handles user deduplication (keeps the longest name per user ID).
 
-### Goals
+## Component 3: ListBot.py (Active Bot)
 
-- Maintain feature parity with legacy bot (add/remove/draw/edit/list operations)
-- Support three independent lists per chat (primary, list2, list3)
-- Use modern async/await patterns instead of deprecated `Updater`
-- Improve data storage (move from pickle to a more maintainable format)
-- Clean command handlers and reduce code duplication
+**Status**: Active. Full-featured bot using `python-telegram-bot~=22.7` with async handlers.
 
-### Expected Improvements
+### Architecture
 
-- **Modern library support**: Uses current `python-telegram-bot` v20+ with async handlers
-- **Type hints**: Full type annotations for clarity and IDE support
-- **Database**: Likely uses SQLite or JSON instead of pickle (TBD)
-- **Refactoring**: Single parameterized handler instead of tripled functions
-- **Better error handling**: Structured exception handling vs. bare `except:` blocks
+- **Entry point**: `main()` builds the `Application`, registers handlers, starts polling
+- **UI layer**: Inline keyboards (`InlineKeyboardMarkup`) for list/prompt browsing; `ForceReply` for text input
+- **Data layer**: All persistence goes through `database.py` (SQLite, `listbot.db`)
+- **Localization**: All user-visible strings via `strings.py` / `locales/*.json`
+- **Token loading**: `BOT_TOKEN` env var → `token.txt` fallback
+- **Deployment**: Docker (`Dockerfile` + `docker-compose.yml`); database stored in `/app/data/`
 
-### Data Migration Path
+### Key Handlers
 
-Lists exported via `extract_telegram.py` will be transformed into the new bot's database format:
-1. Extract messages using `extract_telegram.py` → JSON output
-2. Parse `/add` commands and `/grupp` messages to reconstruct list state
-3. Load into ListBot.py's data store (format TBD)
+| Handler | Purpose |
+|---|---|
+| `button_handler` | Dispatches all inline keyboard callbacks (list nav, draw, add, edit, remove, rename, delete, share) |
+| `reply_handler` | Handles `ForceReply` responses for text input (new item, edit text, list rename, share target) |
+| `draw_command` | `/draw [list]` — draws a random prompt from the specified or default list |
+| `add_command` | `/add [list] text` — adds a prompt directly via command |
+| `show_panel` | `/list` — opens the list-selection panel |
+| `cancel_command` | `/cancel` — aborts any pending ForceReply action |
+| `help_command` | `/help` — posts usage instructions in-thread |
+
+### Notable Patterns
+
+- **Single message per action**: All output consolidated into one message/edit to avoid multiple notifications
+- **Thread awareness**: Passes `message_thread_id` through to keep replies in the correct forum topic
+- **Shared lists**: Lists can be shared to other chats; ownership transfer supported
 
 ## Running the Tools
 
-### ListBot.old.py (Legacy)
-
-Requires `python-telegram-bot` library version 13.14 or earlier (modern versions removed `Updater`):
+### ListBot.py
 
 ```bash
-# Install old version if needed
-pip install "python-telegram-bot>=13.0,<14.0"
+pip install -r requirements.txt
 
-# Run
-python ListBot.old.py
-```
-
-Bot will start polling for Telegram updates and serve commands until interrupted.
-
-### ListBot.py (Modern)
-
-Currently under development. Once complete, will use modern `python-telegram-bot` v20+:
-
-```bash
-# Will require (once implemented)
-pip install python-telegram-bot>=20.0
-
-# Run (TBD)
+# Run directly
 python ListBot.py
+
+# Run via Docker
+docker-compose up --build
 ```
 
-Expects modern async bot initialization with `Application` class and async command handlers.
+Token is read from `BOT_TOKEN` env var or `token.txt`. The database is created automatically on first run.
 
 ### extract_telegram.py
 
@@ -196,12 +168,9 @@ python "Nachricht extrahieren/extract_telegram.py" input.json --bot-name "MyBot"
 ### Bot Behavior Rules
 - **Single notification per action**: Any message sent by the bot must result in at most one notification to other chat users. Do not send multiple messages where one would suffice; consolidate all output into a single reply.
 
-### Off-Limits
-- **ListBot.old.py**: Do NOT edit. This is archived legacy code preserved for reference and migration purposes only.
-
 ### Confirmation Required
 - **Creating new files**: Always ask the user before creating a new file. Describe what the file will contain and why it is needed.
-- **Large changes**: Any change exceeding ~30 net new lines requires explicit user approval before writing.
+- **Large changes**: Any change exceeding ~30 net new lines requires explicit user approval before writing. Large changes are not unwanted — they just need the user to confirm the plan first, so the implementation stays focused and reviewable.
 
 ### New Functions
 - **Size limit**: Maximum 100 lines per new function
@@ -225,30 +194,19 @@ def validate_list_item(item: str, max_length: int = 255) -> tuple[bool, str]:
 
 ❌ **Bad**: Editing two functions or adding 200+ lines in one change
 
-❌ **Bad**: Editing ListBot.old.py
-
 ## Development Notes
 
 ### Character Encoding
 
-Both scripts explicitly use UTF-8 (necessary for German text in messages and code comments).
+All files use UTF-8 (necessary for German locale strings and code comments).
 
-### Code Style Observations
+### Code Style
 
-- **ListBot.old.py**: Early-2020s style; bare `except:`, string concatenation, no type hints, inline variable comments
-- **extract_telegram.py**: Modern Python; type hints with union syntax (`|`), f-strings, clean structure
-
-### Pickle Security
-
-ListBot stores state in pickle files (`.../lists/{chat_id}`). Pickle can execute arbitrary code; only load from trusted sources.
-
-### Redundant Functions
-
-ListBot has significant code duplication across variants 1/2/3. The triple-variant pattern (list, list2, list3) could be refactored into a parameterized handler, but is preserved as-is in the legacy code.
+- **ListBot.py / database.py / strings.py**: Modern Python 3.12; type hints, f-strings, async/await, full type annotations
+- **extract_telegram.py / import_json.py**: Same modern style; union types (`X | Y`)
 
 ## Python Version
 
-- **VirtualEnv**: Python 3.12.10 (configured in `venv/pyvenv.cfg`)
-- **ListBot.old.py**: Compatible with Python 2.7-3.9 (old `telegram.ext` API era); requires `python-telegram-bot` 13.x
-- **ListBot.py**: Target Python 3.10+ with `python-telegram-bot` 20+
-- **extract_telegram.py**: Requires Python 3.10+ (uses `X | Y` union type syntax)
+- **VirtualEnv**: Python 3.12.10 (`venv/pyvenv.cfg`)
+- **ListBot.py**: Requires Python 3.10+; `python-telegram-bot~=22.7`
+- **extract_telegram.py / import_json.py**: Require Python 3.10+ (union type syntax)
