@@ -630,8 +630,12 @@ async def show_panel(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None
 
 async def help_command(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
     """Send a help message when /help is issued."""
-    chat_id = update.effective_chat.id
-    await update.message.reply_text(t("help_text", chat_id=chat_id), parse_mode="HTML")
+    chat = update.effective_chat
+    await update.message.delete()
+    await context.bot.send_message(
+        chat.id, t("help_text", chat_id=chat.id), parse_mode="HTML",
+        message_thread_id=update.message.message_thread_id,
+    )
 
 
 def main() -> None:
