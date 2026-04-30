@@ -176,7 +176,7 @@ async def _send_force_reply(
     """Send a ForceReply prompt and record the pending action in chat_data."""
     msg_text, entities = _force_reply_msg(user, body, bold, suffix)
     prompt_msg = await context.bot.send_message(
-        chat_id, msg_text,
+        chat_id, msg_text + "\n/cancel to cancel",
         reply_markup=ForceReply(selective=True),
         entities=entities,
         message_thread_id=thread_id,
@@ -546,6 +546,38 @@ async def reply_handler(update: Update, context: ContextTypes.DEFAULT_TYPE) -> N
         await context.bot.edit_message_text(f"{note}\n\n{text}", chat_id=chat_id, message_id=panel_msg_id, reply_markup=markup, parse_mode="Markdown")
 
 
+async def cancel_command(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
+    """Cancel a pending ForceReply action for the invoking user."""
+    msg = update.message
+    if not msg or not msg.from_user:
+        return
+    state = context.chat_data.pop(f"user:{msg.from_user.id}", None)
+    await msg.delete()
+    if not state:
+        return
+    chat_id = msg.chat_id
+    try:
+        await context.bot.delete_message(chat_id, state["prompt_msg_id"])
+    except Exception:
+        pass
+    list_name = state.get("list_name")
+    panel_msg_id = state.get("panel_msg_id")
+    if panel_msg_id:
+        if list_name:
+            owner_chat_id = resolve_list_owner(chat_id, list_name) or chat_id
+            text, markup = _render_list_view(owner_chat_id, list_name)
+        else:
+            chat_title = msg.chat.title or "Lists"
+            text, markup = _render_lists_view(chat_id, chat_title)
+        try:
+            await context.bot.edit_message_text(
+                text, chat_id=chat_id, message_id=panel_msg_id,
+                reply_markup=markup, parse_mode="Markdown",
+            )
+        except Exception:
+            pass
+
+
 async def draw_command(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
     """Draw a random item from the default list."""
     chat_id = update.effective_chat.id
@@ -605,6 +637,7 @@ async def help_command(update: Update, context: ContextTypes.DEFAULT_TYPE) -> No
         "/lb — Open the interactive list panel\n"
         "/draw — Draw a random item from your default list\n"
         "/add &lt;text&gt; — Add an item to your default list\n"
+        "/cancel — Cancel a pending add/edit/remove prompt\n"
         "/help — Show this message\n\n"
         "<b>Panel actions</b>\n"
         "🎲 Draw — Pick a random item\n"
@@ -636,6 +669,7 @@ def main() -> None:
     application.add_handler(CommandHandler("lb", show_panel))
     application.add_handler(CommandHandler("add", add_command))
     application.add_handler(CommandHandler("draw", draw_command))
+    application.add_handler(CommandHandler("cancel", cancel_command))
     application.add_handler(CallbackQueryHandler(button_handler))
     application.add_handler(MessageHandler(filters.REPLY & filters.TEXT & ~filters.COMMAND, reply_handler))
 
