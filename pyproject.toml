@@ -1,0 +1,26 @@
+[project]
+name = "listbot"
+version = "0.1.0"
+requires-python = ">=3.10"
+dependencies = [
+    "python-telegram-bot~=22.7",
+]
+
+[tool.ruff]
+line-length = 120
+target-version = "py310"
+
+[tool.ruff.lint]
+select = ["E", "F", "I"]
+
+[tool.mypy]
+python_version = "3.10"
+ignore_missing_imports = true
+warn_return_any = true
+warn_unused_configs = true
+
+# union-attr and index errors are false positives from handler context guarantees
+# (update.callback_query / update.message are non-None when called from their respective handlers)
+[[tool.mypy.overrides]]
+module = "ListBot"
+disable_error_code = ["union-attr", "index"]

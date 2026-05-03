@@ -1,10 +1,10 @@
 #!/usr/bin/env python3
 """SQLite database layer for ListBot prompt storage."""
 
-import sqlite3
 import logging
 import os
 import random
+import sqlite3
 from pathlib import Path
 
 logger = logging.getLogger(__name__)
@@ -208,11 +208,12 @@ def _get_or_create_list(conn: sqlite3.Connection, chat_id: int, list_name: str) 
         (chat_id, list_name),
     ).fetchone()
     if row:
-        return row["id"]
+        return int(row["id"])
     cur = conn.execute(
         "INSERT INTO lists (chat_id, list_name) VALUES (?, ?)",
         (chat_id, list_name),
     )
+    assert cur.lastrowid is not None
     return cur.lastrowid
 
 
@@ -230,7 +231,7 @@ def add_prompt(chat_id: int, list_name: str, text: str, added_by_id: int | None 
     """Append a prompt to a list. Returns the new prompt's position."""
     with get_connection() as conn:
         list_id = _get_or_create_list(conn, chat_id, list_name)
-        max_pos = conn.execute(
+        max_pos: int = conn.execute(
             "SELECT COALESCE(MAX(position), 0) FROM prompts WHERE list_id = ?",
             (list_id,),
         ).fetchone()[0]
@@ -280,7 +281,7 @@ def draw_random_prompt(chat_id: int, list_name: str) -> sqlite3.Row | None:
         if not prompts:
             return None
         weights = [1.0 / (p["drawn"] + 1) for p in prompts]
-        prompt = random.choices(prompts, weights=weights, k=1)[0]
+        prompt: sqlite3.Row = random.choices(prompts, weights=weights, k=1)[0]
         conn.execute(
             "UPDATE prompts SET drawn = drawn + 1, drawn_at = datetime('now') WHERE id = ?",
             (prompt["id"],),
@@ -289,7 +290,9 @@ def draw_random_prompt(chat_id: int, list_name: str) -> sqlite3.Row | None:
         return prompt
 
 
-def get_recently_drawn_prompts(chat_id: int, list_name: str, limit: int = 10, max_age_days: int = 7) -> list[sqlite3.Row]:
+def get_recently_drawn_prompts(
+    chat_id: int, list_name: str, limit: int = 10, max_age_days: int = 7
+) -> list[sqlite3.Row]:
     """Return up to `limit` prompts drawn within the last `max_age_days` days, most recent first."""
     with get_connection() as conn:
         row = conn.execute(

@@ -7,17 +7,35 @@ import os
 import re
 import sys
 from pathlib import Path
-from telegram.ext import Application, CommandHandler, CallbackQueryHandler, MessageHandler, filters, ContextTypes
-from telegram import Update, InlineKeyboardButton, InlineKeyboardMarkup, ForceReply, MessageEntity
+
+from telegram import ForceReply, InlineKeyboardButton, InlineKeyboardMarkup, MessageEntity, Update
 from telegram.error import TimedOut
-from strings import load_locale, t
+from telegram.ext import Application, CallbackQueryHandler, CommandHandler, ContextTypes, MessageHandler, filters
+
 from database import (
-    init_db, get_list_names, get_prompts, draw_random_prompt, add_prompt,
-    edit_prompt, remove_prompt, rename_list, delete_list, get_stats,
-    get_default_list, set_default_list, upsert_user, lookup_name,
-    add_list_share, remove_list_share, get_list_shares, get_shared_lists,
-    transfer_list_ownership, resolve_list_owner, get_recently_drawn_prompts,
+    add_list_share,
+    add_prompt,
+    delete_list,
+    draw_random_prompt,
+    edit_prompt,
+    get_default_list,
+    get_list_names,
+    get_list_shares,
+    get_prompts,
+    get_recently_drawn_prompts,
+    get_shared_lists,
+    get_stats,
+    init_db,
+    lookup_name,
+    remove_list_share,
+    remove_prompt,
+    rename_list,
+    resolve_list_owner,
+    set_default_list,
+    transfer_list_ownership,
+    upsert_user,
 )
+from strings import load_locale, t
 
 # Enable logging
 logging.basicConfig(
@@ -206,18 +224,19 @@ async def _cleanup_reply_messages(bot, chat_id: int, prompt_msg_id: int, user_ms
     await bot.delete_message(chat_id, user_msg_id)
 
 
-async def _do_draw(bot, chat_id: int, list_name: str, user_name: str, thread_id: int | None, notify_chat_id: int | None = None) -> bool:
+async def _do_draw(
+    bot, chat_id: int, list_name: str, user_name: str, thread_id: int | None, notify_chat_id: int | None = None
+) -> bool:
     """Draw a random prompt and notify. chat_id is the list owner; notify_chat_id is where to send the result."""
     prompt = draw_random_prompt(chat_id, list_name)
     if not prompt:
         return False
     added_by = _first_name(prompt["added_by_name"]) if prompt["added_by_name"] else ""
     author_line = t("notify_drew_author", added_by=added_by) if added_by else ""
-    await _notify(
-        bot, notify_chat_id if notify_chat_id is not None else chat_id,
-        t("notify_drew", user=_first_name(user_name), list_name=list_name, text=prompt["text"], author_line=author_line),
-        thread_id,
+    msg = t(
+        "notify_drew", user=_first_name(user_name), list_name=list_name, text=prompt["text"], author_line=author_line
     )
+    await _notify(bot, notify_chat_id if notify_chat_id is not None else chat_id, msg, thread_id)
     return True
 
 
@@ -248,7 +267,9 @@ async def button_handler(update: Update, context: ContextTypes.DEFAULT_TYPE) -> 
         list_name = data[5:]
         owner_chat_id = resolve_list_owner(chat_id, list_name) or chat_id
         user_name = query.from_user.full_name if query.from_user else "Someone"
-        if not await _do_draw(context.bot, owner_chat_id, list_name, user_name, query.message.message_thread_id, notify_chat_id=chat_id):
+        if not await _do_draw(
+            context.bot, owner_chat_id, list_name, user_name, query.message.message_thread_id, notify_chat_id=chat_id
+        ):
             text, markup = _render_list_view(owner_chat_id, list_name, t("err_all_drawn"))
             await query.edit_message_text(text, reply_markup=markup, parse_mode="Markdown")
             return
@@ -267,7 +288,8 @@ async def button_handler(update: Update, context: ContextTypes.DEFAULT_TYPE) -> 
         page_prompts = prompts[start:start + PAGE_SIZE]
         lines = "\n".join(f"{p['position']}. {p['text']}" for p in page_prompts) or t("panel_empty")
         total_pages = max(1, (total + PAGE_SIZE - 1) // PAGE_SIZE)
-        header = f"*{list_name}*  {t('panel_list_header_paged', total=total, drawn=drawn, page=page + 1, total_pages=total_pages)}"
+        paged = t("panel_list_header_paged", total=total, drawn=drawn, page=page + 1, total_pages=total_pages)
+        header = f"*{list_name}*  {paged}"
         text = f"{header}\n\n{lines}"
         _, base_markup = _render_list_view(owner_chat_id, list_name)
         if total_pages > 1:
@@ -289,8 +311,14 @@ async def button_handler(update: Update, context: ContextTypes.DEFAULT_TYPE) -> 
         if not s:
             await query.answer(t("err_list_not_found"), show_alert=True)
             return
-        user_lines = "\n".join(t("stats_user_line", name=_first_name(r["name"]), count=r["count"]) for r in s["by_user"])
-        most = t("stats_most_drawn_fmt", text=s["most_drawn"]["text"], count=s["most_drawn"]["count"]) if s["most_drawn"] else t("stats_most_drawn_none")
+        user_lines = "\n".join(
+            t("stats_user_line", name=_first_name(r["name"]), count=r["count"]) for r in s["by_user"]
+        )
+        most = (
+            t("stats_most_drawn_fmt", text=s["most_drawn"]["text"], count=s["most_drawn"]["count"])
+            if s["most_drawn"]
+            else t("stats_most_drawn_none")
+        )
         stats_text = (
             f"*{t('stats_title', list_name=list_name)}*\n\n"
             f"{t('stats_prompts', total=s['total'])}\n"
@@ -439,12 +467,18 @@ async def reply_handler(update: Update, context: ContextTypes.DEFAULT_TYPE) -> N
         if not user_text.isdigit():
             await _cleanup_reply_messages(context.bot, chat_id, prompt_msg_id, msg.message_id)
             text, markup = _render_list_view(owner_chat_id, list_name, t("err_not_a_number"))
-            await context.bot.edit_message_text(text, chat_id=chat_id, message_id=panel_msg_id, reply_markup=markup, parse_mode="Markdown")
+            await context.bot.edit_message_text(
+                text, chat_id=chat_id, message_id=panel_msg_id, reply_markup=markup, parse_mode="Markdown"
+            )
             return
         position = int(user_text)
         removed = remove_prompt(owner_chat_id, list_name, position)
         await _cleanup_reply_messages(context.bot, chat_id, prompt_msg_id, msg.message_id)
-        note = t("notify_removed", position=position, text=removed["text"]) if removed else t("err_no_item_at", position=position)
+        note = (
+            t("notify_removed", position=position, text=removed["text"])
+            if removed
+            else t("err_no_item_at", position=position)
+        )
         await _notify(context.bot, chat_id, note, msg.message_thread_id)
         await context.bot.delete_message(chat_id, panel_msg_id)
 
@@ -457,21 +491,33 @@ async def reply_handler(update: Update, context: ContextTypes.DEFAULT_TYPE) -> N
             await _cleanup_reply_messages(context.bot, chat_id, prompt_msg_id, msg.message_id)
             if not new_name:
                 text, markup = _render_list_view(owner_chat_id, list_name, t("err_rename_format"))
-                await context.bot.edit_message_text(text, chat_id=chat_id, message_id=panel_msg_id, reply_markup=markup, parse_mode="Markdown")
+                await context.bot.edit_message_text(
+                    text, chat_id=chat_id, message_id=panel_msg_id, reply_markup=markup, parse_mode="Markdown"
+                )
                 return
             renamed = rename_list(owner_chat_id, list_name, new_name)
             if renamed:
-                await _notify(context.bot, chat_id, t("notify_renamed", old_name=list_name, new_name=new_name), msg.message_thread_id)
+                await _notify(
+                    context.bot, chat_id,
+                    t("notify_renamed", old_name=list_name, new_name=new_name),
+                    msg.message_thread_id,
+                )
                 text, markup = _render_list_view(owner_chat_id, new_name)
-                await context.bot.edit_message_text(text, chat_id=chat_id, message_id=panel_msg_id, reply_markup=markup, parse_mode="Markdown")
+                await context.bot.edit_message_text(
+                    text, chat_id=chat_id, message_id=panel_msg_id, reply_markup=markup, parse_mode="Markdown"
+                )
             else:
                 text, markup = _render_list_view(owner_chat_id, list_name, t("err_rename_exists", name=new_name))
-                await context.bot.edit_message_text(text, chat_id=chat_id, message_id=panel_msg_id, reply_markup=markup, parse_mode="Markdown")
+                await context.bot.edit_message_text(
+                    text, chat_id=chat_id, message_id=panel_msg_id, reply_markup=markup, parse_mode="Markdown"
+                )
             return
         if len(parts) < 2 or not parts[0].isdigit():
             await _cleanup_reply_messages(context.bot, chat_id, prompt_msg_id, msg.message_id)
             text, markup = _render_list_view(owner_chat_id, list_name, t("err_edit_format"))
-            await context.bot.edit_message_text(text, chat_id=chat_id, message_id=panel_msg_id, reply_markup=markup, parse_mode="Markdown")
+            await context.bot.edit_message_text(
+                text, chat_id=chat_id, message_id=panel_msg_id, reply_markup=markup, parse_mode="Markdown"
+            )
             return
         position, new_text = int(parts[0]), parts[1].strip()
         user_name = msg.from_user.full_name if msg.from_user else ""
@@ -491,7 +537,9 @@ async def reply_handler(update: Update, context: ContextTypes.DEFAULT_TYPE) -> N
         list_name = user_text
         text, markup = _render_list_view(chat_id, list_name, t("confirm_list_created"))
         await _cleanup_reply_messages(context.bot, chat_id, prompt_msg_id, msg.message_id)
-        await context.bot.edit_message_text(text, chat_id=chat_id, message_id=panel_msg_id, reply_markup=markup, parse_mode="Markdown")
+        await context.bot.edit_message_text(
+            text, chat_id=chat_id, message_id=panel_msg_id, reply_markup=markup, parse_mode="Markdown"
+        )
 
     elif state["action"] == "share_invite":
         list_name = state["list_name"]
@@ -499,18 +547,24 @@ async def reply_handler(update: Update, context: ContextTypes.DEFAULT_TYPE) -> N
         await _cleanup_reply_messages(context.bot, chat_id, prompt_msg_id, msg.message_id)
         if not user_text.lstrip("-").isdigit():
             text, markup = _render_share_panel(chat_id, list_name, owner_chat_id)
-            await context.bot.edit_message_text(text, chat_id=chat_id, message_id=panel_msg_id, reply_markup=markup, parse_mode="Markdown")
+            await context.bot.edit_message_text(
+                text, chat_id=chat_id, message_id=panel_msg_id, reply_markup=markup, parse_mode="Markdown"
+            )
             return
         guest_id = int(user_text)
         from database import get_connection
         with get_connection() as conn:
-            row = conn.execute("SELECT id FROM lists WHERE chat_id=? AND list_name=?", (owner_chat_id, list_name)).fetchone()
+            row = conn.execute(
+                "SELECT id FROM lists WHERE chat_id=? AND list_name=?", (owner_chat_id, list_name)
+            ).fetchone()
         if row and add_list_share(row["id"], guest_id):
             note = t("confirm_invite_ok", chat_id=guest_id, list_name=list_name)
         else:
             note = t("err_invite_failed", chat_id=guest_id)
         text, markup = _render_share_panel(chat_id, list_name, owner_chat_id)
-        await context.bot.edit_message_text(f"{note}\n\n{text}", chat_id=chat_id, message_id=panel_msg_id, reply_markup=markup, parse_mode="Markdown")
+        await context.bot.edit_message_text(
+            f"{note}\n\n{text}", chat_id=chat_id, message_id=panel_msg_id, reply_markup=markup, parse_mode="Markdown"
+        )
 
     elif state["action"] == "share_remove":
         list_name = state["list_name"]
@@ -518,18 +572,24 @@ async def reply_handler(update: Update, context: ContextTypes.DEFAULT_TYPE) -> N
         await _cleanup_reply_messages(context.bot, chat_id, prompt_msg_id, msg.message_id)
         if not user_text.lstrip("-").isdigit():
             text, markup = _render_share_panel(chat_id, list_name, owner_chat_id)
-            await context.bot.edit_message_text(text, chat_id=chat_id, message_id=panel_msg_id, reply_markup=markup, parse_mode="Markdown")
+            await context.bot.edit_message_text(
+                text, chat_id=chat_id, message_id=panel_msg_id, reply_markup=markup, parse_mode="Markdown"
+            )
             return
         guest_id = int(user_text)
         from database import get_connection
         with get_connection() as conn:
-            row = conn.execute("SELECT id FROM lists WHERE chat_id=? AND list_name=?", (owner_chat_id, list_name)).fetchone()
+            row = conn.execute(
+                "SELECT id FROM lists WHERE chat_id=? AND list_name=?", (owner_chat_id, list_name)
+            ).fetchone()
         if row and remove_list_share(row["id"], guest_id):
             note = t("confirm_remove_guest_ok", chat_id=guest_id, list_name=list_name)
         else:
             note = t("err_remove_guest_failed", chat_id=guest_id)
         text, markup = _render_share_panel(chat_id, list_name, owner_chat_id)
-        await context.bot.edit_message_text(f"{note}\n\n{text}", chat_id=chat_id, message_id=panel_msg_id, reply_markup=markup, parse_mode="Markdown")
+        await context.bot.edit_message_text(
+            f"{note}\n\n{text}", chat_id=chat_id, message_id=panel_msg_id, reply_markup=markup, parse_mode="Markdown"
+        )
 
     elif state["action"] == "share_transfer":
         list_name = state["list_name"]
@@ -537,19 +597,25 @@ async def reply_handler(update: Update, context: ContextTypes.DEFAULT_TYPE) -> N
         await _cleanup_reply_messages(context.bot, chat_id, prompt_msg_id, msg.message_id)
         if not user_text.lstrip("-").isdigit():
             text, markup = _render_share_panel(chat_id, list_name, owner_chat_id)
-            await context.bot.edit_message_text(text, chat_id=chat_id, message_id=panel_msg_id, reply_markup=markup, parse_mode="Markdown")
+            await context.bot.edit_message_text(
+                text, chat_id=chat_id, message_id=panel_msg_id, reply_markup=markup, parse_mode="Markdown"
+            )
             return
         new_owner_id = int(user_text)
         from database import get_connection
         with get_connection() as conn:
-            row = conn.execute("SELECT id FROM lists WHERE chat_id=? AND list_name=?", (owner_chat_id, list_name)).fetchone()
+            row = conn.execute(
+                "SELECT id FROM lists WHERE chat_id=? AND list_name=?", (owner_chat_id, list_name)
+            ).fetchone()
         if row and transfer_list_ownership(row["id"], new_owner_id):
             note = t("confirm_transfer_ok", list_name=list_name, new_owner=new_owner_id)
             text, markup = _render_share_panel(chat_id, list_name, new_owner_id)
         else:
             note = t("err_transfer_failed", chat_id=new_owner_id)
             text, markup = _render_share_panel(chat_id, list_name, owner_chat_id)
-        await context.bot.edit_message_text(f"{note}\n\n{text}", chat_id=chat_id, message_id=panel_msg_id, reply_markup=markup, parse_mode="Markdown")
+        await context.bot.edit_message_text(
+            f"{note}\n\n{text}", chat_id=chat_id, message_id=panel_msg_id, reply_markup=markup, parse_mode="Markdown"
+        )
 
 
 async def cancel_command(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
@@ -593,7 +659,9 @@ async def draw_command(update: Update, context: ContextTypes.DEFAULT_TYPE) -> No
         return
     owner_chat_id = resolve_list_owner(chat_id, list_name) or chat_id
     user_name = update.message.from_user.full_name if update.message.from_user else "Someone"
-    if not await _do_draw(context.bot, owner_chat_id, list_name, user_name, update.message.message_thread_id, notify_chat_id=chat_id):
+    if not await _do_draw(
+        context.bot, owner_chat_id, list_name, user_name, update.message.message_thread_id, notify_chat_id=chat_id
+    ):
         await update.message.reply_text(t("err_list_empty", list_name=list_name), parse_mode="Markdown")
         return
     await update.message.delete()
