@@ -1,6 +1,5 @@
 from db.connection import get_connection
-from db.schema import init_db
-from db.lists import get_list_names, rename_list, delete_list
+from db.lists import delete_list, get_list_names, rename_list
 from db.prompts import (
     add_prompt,
     draw_random_prompt,
@@ -10,7 +9,8 @@ from db.prompts import (
     get_stats,
     remove_prompt,
 )
-from db.users import lookup_name, upsert_user
+from db.schema import init_db
+from db.settings import get_default_list, set_default_list
 from db.shares import (
     add_list_share,
     get_list_shares,
@@ -19,7 +19,7 @@ from db.shares import (
     resolve_list_owner,
     transfer_list_ownership,
 )
-from db.settings import get_default_list, set_default_list
+from db.users import lookup_name, upsert_user
 
 __all__ = [
     "get_connection",

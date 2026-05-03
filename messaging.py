@@ -3,6 +3,7 @@ from telegram.ext import ContextTypes
 
 import i18n as lang
 
+
 async def notify(bot, chat_id: int, text: str, thread_id: int | None) -> None:
     """Send an HTML notification to the correct chat thread."""
     await bot.send_message(chat_id, text, parse_mode="HTML", message_thread_id=thread_id)

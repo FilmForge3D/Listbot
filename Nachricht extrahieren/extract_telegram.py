@@ -5,13 +5,12 @@ Extrahiert aus einem Telegram-Gruppenexport (result.json):
   2. Nachrichten die mit / beginnen
 """
 
+import argparse
 import json
 import re
-import argparse
 from collections import Counter
 from difflib import get_close_matches
 from pathlib import Path
-
 
 # Muster für relevante ListBot-Nachrichten
 LISTBOT_PATTERNS = [

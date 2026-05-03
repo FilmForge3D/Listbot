@@ -1,6 +1,8 @@
 from telegram import InlineKeyboardButton, InlineKeyboardMarkup
+
 import db
 import i18n as lang
+
 
 def _render_lists_view(chat_id: int, title: str) -> tuple[str, InlineKeyboardMarkup]:
     """Build the list-selection panel text and keyboard."""

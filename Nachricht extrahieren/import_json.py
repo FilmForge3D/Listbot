@@ -1,9 +1,9 @@
 #!/usr/bin/env python3
 """Import prompts from ergebnis.json into the ListBot SQLite database."""
 
+import argparse
 import json
 import sys
-import argparse
 from pathlib import Path
 
 _ROOT = Path(__file__).parent.parent

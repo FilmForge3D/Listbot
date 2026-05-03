@@ -1,8 +1,8 @@
-import i18n as lang
 import db
-
+import i18n as lang
 from messaging import notify
 from text import first_name
+
 
 async def do_draw(
     bot, chat_id: int, list_name: str, user_name: str, thread_id: int | None, notify_chat_id: int | None = None

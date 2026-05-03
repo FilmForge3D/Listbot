@@ -3,9 +3,6 @@
 
 import argparse
 import logging
-import os
-import sys
-from pathlib import Path
 
 from telegram import InlineKeyboardButton, InlineKeyboardMarkup, Update
 from telegram.error import TimedOut
@@ -13,11 +10,10 @@ from telegram.ext import Application, CallbackQueryHandler, CommandHandler, Cont
 
 import db
 import i18n as lang
-
 import ui.views as views
-
-from messaging import notify, send_force_reply, cleanup_reply_messages
 from actions import do_draw
+from config import load_token
+from messaging import cleanup_reply_messages, notify, send_force_reply
 from text import first_name
 
 # Enable logging
@@ -26,25 +22,6 @@ logging.basicConfig(
     level=logging.INFO
 )
 logger = logging.getLogger(__name__)
-
-
-def load_token() -> str:
-    """Load bot token from BOT_TOKEN env var or token.txt file."""
-    token = os.environ.get("BOT_TOKEN", "").strip()
-    if token:
-        return token
-
-    token_path = Path("token.txt")
-    if not token_path.exists():
-        logger.error("token.txt not found and BOT_TOKEN env var not set")
-        sys.exit(1)
-
-    token = token_path.read_text(encoding="utf-8").strip()
-    if not token:
-        logger.error("token.txt is empty")
-        sys.exit(1)
-
-    return token
 
 
 async def button_handler(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
