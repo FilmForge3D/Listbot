@@ -219,7 +219,8 @@ __marimo__/
 # Streamlit
 .streamlit/secrets.toml
 
-*.json
+ergebnis.json
+result.json
 token.txt
 *.db
 *.code-workspace

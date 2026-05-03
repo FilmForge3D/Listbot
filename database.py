@@ -289,6 +289,24 @@ def draw_random_prompt(chat_id: int, list_name: str) -> sqlite3.Row | None:
         return prompt
 
 
+def get_recently_drawn_prompts(chat_id: int, list_name: str, limit: int = 10, max_age_days: int = 7) -> list[sqlite3.Row]:
+    """Return up to `limit` prompts drawn within the last `max_age_days` days, most recent first."""
+    with get_connection() as conn:
+        row = conn.execute(
+            "SELECT id FROM lists WHERE chat_id = ? AND list_name = ?",
+            (chat_id, list_name),
+        ).fetchone()
+        if not row:
+            return []
+        return conn.execute(
+            "SELECT text, drawn_at FROM prompts"
+            " WHERE list_id = ? AND drawn_at IS NOT NULL"
+            " AND drawn_at >= datetime('now', ?)"
+            " ORDER BY drawn_at DESC LIMIT ?",
+            (row["id"], f"-{max_age_days} days", limit),
+        ).fetchall()
+
+
 def get_stats(chat_id: int, list_name: str) -> dict | None:
     """Return statistics for a list, or None if the list does not exist."""
     with get_connection() as conn:

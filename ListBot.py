@@ -16,7 +16,7 @@ from database import (
     edit_prompt, remove_prompt, rename_list, delete_list, get_stats,
     get_default_list, set_default_list, upsert_user, lookup_name,
     add_list_share, remove_list_share, get_list_shares, get_shared_lists,
-    transfer_list_ownership, resolve_list_owner,
+    transfer_list_ownership, resolve_list_owner, get_recently_drawn_prompts,
 )
 
 # Enable logging
@@ -80,7 +80,13 @@ def _render_list_view(chat_id: int, list_name: str, note: str = "") -> tuple[str
     total = len(prompts)
     drawn = sum(1 for p in prompts if p["drawn"])
     header = f"*{list_name}*  {t('panel_list_header', total=total, drawn=drawn)}"
-    text = f"{header}\n\n{note}" if note else header
+    recent = get_recently_drawn_prompts(chat_id, list_name)
+    if recent:
+        lines = "\n".join(f"• {p['text']}" for p in recent)
+        recent_section = f"\n\n*{t('panel_recent_header')}*\n{lines}"
+    else:
+        recent_section = ""
+    text = f"{header}{recent_section}\n\n{note}" if note else f"{header}{recent_section}"
     markup = InlineKeyboardMarkup([
         [InlineKeyboardButton(t("btn_draw"), callback_data=f"draw:{list_name}"),
          InlineKeyboardButton(t("btn_add"), callback_data=f"add:{list_name}")],
