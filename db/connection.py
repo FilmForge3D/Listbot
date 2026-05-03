@@ -1,6 +1,4 @@
-import os
 import sqlite3
-from pathlib import Path
 
 from config import DATA_DIR
 

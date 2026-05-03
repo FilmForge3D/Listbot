@@ -135,7 +135,7 @@ def _is_draw_result(text: str) -> bool:
     /list outputs have sequentially numbered lines (1,2,3… or 5,6,7…).
     Draw results are single-line or have non-sequential numbering.
     """
-    lines = [l for l in text.strip().split("\n") if l.strip()]
+    lines = [line for line in text.strip().split("\n") if line.strip()]
     if len(lines) <= 1:
         return True
     numbers = []

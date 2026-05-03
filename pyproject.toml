@@ -22,5 +22,5 @@ warn_unused_configs = true
 # union-attr and index errors are false positives from handler context guarantees
 # (update.callback_query / update.message are non-None when called from their respective handlers)
 [[tool.mypy.overrides]]
-module = "ListBot"
+module = ["ListBot", "handlers.*", "handlers", "messaging"]
 disable_error_code = ["union-attr", "index"]

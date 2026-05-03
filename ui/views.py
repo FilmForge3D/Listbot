@@ -4,7 +4,7 @@ import db
 import i18n as lang
 
 
-def _render_lists_view(chat_id: int, title: str) -> tuple[str, InlineKeyboardMarkup]:
+def render_lists_view(chat_id: int, title: str) -> tuple[str, InlineKeyboardMarkup]:
     """Build the list-selection panel text and keyboard."""
     owned = db.get_list_names(chat_id)
     shared = db.get_shared_lists(chat_id)
@@ -32,7 +32,7 @@ def _render_lists_view(chat_id: int, title: str) -> tuple[str, InlineKeyboardMar
     return text, InlineKeyboardMarkup(buttons)
 
 
-def _render_list_view(chat_id: int, list_name: str, note: str = "") -> tuple[str, InlineKeyboardMarkup]:
+def render_list_view(chat_id: int, list_name: str, note: str = "") -> tuple[str, InlineKeyboardMarkup]:
     """Build the detail panel for a single named list."""
     prompts = db.get_prompts(chat_id, list_name)
     total = len(prompts)
@@ -59,7 +59,7 @@ def _render_list_view(chat_id: int, list_name: str, note: str = "") -> tuple[str
     return text, markup
 
 
-def _render_share_panel(chat_id: int, list_name: str, owner_chat_id: int) -> tuple[str, InlineKeyboardMarkup]:
+def render_share_panel(chat_id: int, list_name: str, owner_chat_id: int) -> tuple[str, InlineKeyboardMarkup]:
     """Build the sharing management panel for a list."""
     with db.get_connection() as conn:
         row = conn.execute(
