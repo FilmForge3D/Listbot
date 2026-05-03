@@ -12,29 +12,7 @@ from telegram import ForceReply, InlineKeyboardButton, InlineKeyboardMarkup, Mes
 from telegram.error import TimedOut
 from telegram.ext import Application, CallbackQueryHandler, CommandHandler, ContextTypes, MessageHandler, filters
 
-from database import (
-    add_list_share,
-    add_prompt,
-    delete_list,
-    draw_random_prompt,
-    edit_prompt,
-    get_default_list,
-    get_list_names,
-    get_list_shares,
-    get_prompts,
-    get_recently_drawn_prompts,
-    get_shared_lists,
-    get_stats,
-    init_db,
-    lookup_name,
-    remove_list_share,
-    remove_prompt,
-    rename_list,
-    resolve_list_owner,
-    set_default_list,
-    transfer_list_ownership,
-    upsert_user,
-)
+import db
 import i18n as lang
 
 # Enable logging
@@ -66,9 +44,9 @@ def load_token() -> str:
 
 def _render_lists_view(chat_id: int, title: str) -> tuple[str, InlineKeyboardMarkup]:
     """Build the list-selection panel text and keyboard."""
-    owned = get_list_names(chat_id)
-    shared = get_shared_lists(chat_id)
-    default = get_default_list(chat_id)
+    owned = db.get_list_names(chat_id)
+    shared = db.get_shared_lists(chat_id)
+    default = db.get_default_list(chat_id)
     has_any = bool(owned or shared)
     text = f"*{title}*\n\n{lang.t('panel_your_lists')}" if has_any else f"*{title}*\n\n{lang.t('panel_no_lists')}"
     buttons: list[list[InlineKeyboardButton]] = []
@@ -94,11 +72,11 @@ def _render_lists_view(chat_id: int, title: str) -> tuple[str, InlineKeyboardMar
 
 def _render_list_view(chat_id: int, list_name: str, note: str = "") -> tuple[str, InlineKeyboardMarkup]:
     """Build the detail panel for a single named list."""
-    prompts = get_prompts(chat_id, list_name)
+    prompts = db.get_prompts(chat_id, list_name)
     total = len(prompts)
     drawn = sum(1 for p in prompts if p["drawn"])
     header = f"*{list_name}*  {lang.t('panel_list_header', total=total, drawn=drawn)}"
-    recent = get_recently_drawn_prompts(chat_id, list_name)
+    recent = db.get_recently_drawn_prompts(chat_id, list_name)
     if recent:
         lines = "\n".join(f"• {p['text']}" for p in recent)
         recent_section = f"\n\n*{lang.t('panel_recent_header')}*\n{lines}"
@@ -121,21 +99,21 @@ def _render_list_view(chat_id: int, list_name: str, note: str = "") -> tuple[str
 
 def _render_share_panel(chat_id: int, list_name: str, owner_chat_id: int) -> tuple[str, InlineKeyboardMarkup]:
     """Build the sharing management panel for a list."""
-    from database import get_connection
+    from db.database import get_connection
     with get_connection() as conn:
         row = conn.execute(
             "SELECT id FROM lists WHERE chat_id = ? AND list_name = ?",
             (owner_chat_id, list_name),
         ).fetchone()
     list_id = row["id"] if row else None
-    guests = get_list_shares(list_id) if list_id else []
+    guests = db.get_list_shares(list_id) if list_id else []
     is_owner = chat_id == owner_chat_id
     def _fmt_guest(g: int) -> str:
-        n = lookup_name(g)
+        n = db.lookup_name(g)
         return f"  • {n} (`{g}`)" if n else f"  • `{g}`"
     guest_lines = "\n".join(_fmt_guest(g) for g in guests) if guests else lang.t("share_no_guests")
     role = lang.t("share_role_owner") if is_owner else lang.t("share_role_guest")
-    owner_label = lookup_name(owner_chat_id)
+    owner_label = db.lookup_name(owner_chat_id)
     owner_str = f"{owner_label} (`{owner_chat_id}`)" if owner_label else f"`{owner_chat_id}`"
     owner_line = "" if is_owner else lang.t("share_owner_line", owner=owner_str)
     text = (
@@ -228,7 +206,7 @@ async def _do_draw(
     bot, chat_id: int, list_name: str, user_name: str, thread_id: int | None, notify_chat_id: int | None = None
 ) -> bool:
     """Draw a random prompt and notify. chat_id is the list owner; notify_chat_id is where to send the result."""
-    prompt = draw_random_prompt(chat_id, list_name)
+    prompt = db.draw_random_prompt(chat_id, list_name)
     if not prompt:
         return False
     added_by = _first_name(prompt["added_by_name"]) if prompt["added_by_name"] else ""
@@ -251,7 +229,7 @@ async def button_handler(update: Update, context: ContextTypes.DEFAULT_TYPE) -> 
     chat_id = query.message.chat_id
     chat_title = query.message.chat.title or "Lists"
     if query.message.chat.title:
-        upsert_user(chat_id, query.message.chat.title)
+        db.upsert_user(chat_id, query.message.chat.title)
 
     if data == "back":
         text, markup = _render_lists_view(chat_id, chat_title)
@@ -259,13 +237,13 @@ async def button_handler(update: Update, context: ContextTypes.DEFAULT_TYPE) -> 
 
     elif data.startswith("open:"):
         list_name = data[5:]
-        owner_chat_id = resolve_list_owner(chat_id, list_name) or chat_id
+        owner_chat_id = db.resolve_list_owner(chat_id, list_name) or chat_id
         text, markup = _render_list_view(owner_chat_id, list_name)
         await query.edit_message_text(text, reply_markup=markup, parse_mode="Markdown")
 
     elif data.startswith("draw:"):
         list_name = data[5:]
-        owner_chat_id = resolve_list_owner(chat_id, list_name) or chat_id
+        owner_chat_id = db.resolve_list_owner(chat_id, list_name) or chat_id
         user_name = query.from_user.full_name if query.from_user else "Someone"
         if not await _do_draw(
             context.bot, owner_chat_id, list_name, user_name, query.message.message_thread_id, notify_chat_id=chat_id
@@ -278,10 +256,10 @@ async def button_handler(update: Update, context: ContextTypes.DEFAULT_TYPE) -> 
     elif data.startswith("list:"):
         parts = data[5:].rsplit(":", 1)
         list_name = parts[0]
-        owner_chat_id = resolve_list_owner(chat_id, list_name) or chat_id
+        owner_chat_id = db.resolve_list_owner(chat_id, list_name) or chat_id
         page = int(parts[1]) if len(parts) > 1 and parts[1].lstrip("-").isdigit() else 0
         PAGE_SIZE = 50
-        prompts = get_prompts(owner_chat_id, list_name)
+        prompts = db.get_prompts(owner_chat_id, list_name)
         total = len(prompts)
         drawn = sum(1 for p in prompts if p["drawn"])
         start = page * PAGE_SIZE
@@ -306,8 +284,8 @@ async def button_handler(update: Update, context: ContextTypes.DEFAULT_TYPE) -> 
 
     elif data.startswith("stats:"):
         list_name = data[6:]
-        owner_chat_id = resolve_list_owner(chat_id, list_name) or chat_id
-        s = get_stats(owner_chat_id, list_name)
+        owner_chat_id = db.resolve_list_owner(chat_id, list_name) or chat_id
+        s = db.get_stats(owner_chat_id, list_name)
         if not s:
             await query.answer(lang.t("err_list_not_found"), show_alert=True)
             return
@@ -332,10 +310,10 @@ async def button_handler(update: Update, context: ContextTypes.DEFAULT_TYPE) -> 
 
     elif data.startswith("remove:"):
         list_name = data[7:]
-        owner_chat_id = resolve_list_owner(chat_id, list_name) or chat_id
-        if not get_prompts(owner_chat_id, list_name):
+        owner_chat_id = db.resolve_list_owner(chat_id, list_name) or chat_id
+        if not db.get_prompts(owner_chat_id, list_name):
             markup = InlineKeyboardMarkup([[
-                InlineKeyboardButton(lang.t("btn_delete_list"), callback_data=f"delete_list_confirm:{list_name}"),
+                InlineKeyboardButton(lang.t("btn_db.delete_list"), callback_data=f"db.delete_list_confirm:{list_name}"),
                 InlineKeyboardButton(lang.t("btn_back_cancel"), callback_data=f"open:{list_name}"),
             ]])
             await query.edit_message_text(
@@ -366,15 +344,15 @@ async def button_handler(update: Update, context: ContextTypes.DEFAULT_TYPE) -> 
 
     elif data.startswith("set_default:"):
         list_name = data[12:]
-        set_default_list(chat_id, list_name)
-        owner_chat_id = resolve_list_owner(chat_id, list_name) or chat_id
+        db.set_default_list(chat_id, list_name)
+        owner_chat_id = db.resolve_list_owner(chat_id, list_name) or chat_id
         text, markup = _render_list_view(owner_chat_id, list_name, lang.t("confirm_set_default", list_name=list_name))
         await query.edit_message_text(text, reply_markup=markup, parse_mode="Markdown")
 
-    elif data.startswith("delete_list_confirm:"):
+    elif data.startswith("db.delete_list_confirm:"):
         list_name = data[20:]
-        owner_chat_id = resolve_list_owner(chat_id, list_name) or chat_id
-        if delete_list(owner_chat_id, list_name):
+        owner_chat_id = db.resolve_list_owner(chat_id, list_name) or chat_id
+        if db.delete_list(owner_chat_id, list_name):
             text, markup = _render_lists_view(chat_id, lang.t("confirm_list_deleted", list_name=list_name))
             await query.edit_message_text(text, reply_markup=markup, parse_mode="Markdown")
         else:
@@ -383,7 +361,7 @@ async def button_handler(update: Update, context: ContextTypes.DEFAULT_TYPE) -> 
 
     elif data.startswith("share:"):
         list_name = data[6:]
-        owner_chat_id = resolve_list_owner(chat_id, list_name) or chat_id
+        owner_chat_id = db.resolve_list_owner(chat_id, list_name) or chat_id
         text, markup = _render_share_panel(chat_id, list_name, owner_chat_id)
         await query.edit_message_text(text, reply_markup=markup, parse_mode="Markdown")
 
@@ -413,16 +391,16 @@ async def button_handler(update: Update, context: ContextTypes.DEFAULT_TYPE) -> 
 
     elif data.startswith("share_leave:"):
         list_name = data[12:]
-        owner_chat_id = resolve_list_owner(chat_id, list_name)
+        owner_chat_id = db.resolve_list_owner(chat_id, list_name)
         if owner_chat_id:
-            from database import get_connection
+            from db.database import get_connection
             with get_connection() as conn:
                 row = conn.execute(
                     "SELECT id FROM lists WHERE chat_id = ? AND list_name = ?",
                     (owner_chat_id, list_name),
                 ).fetchone()
             if row:
-                remove_list_share(row["id"], chat_id)
+                db.remove_list_share(row["id"], chat_id)
         text, markup = _render_lists_view(chat_id, query.message.chat.title or "Lists")
         await query.edit_message_text(text, reply_markup=markup, parse_mode="Markdown")
 
@@ -449,10 +427,10 @@ async def reply_handler(update: Update, context: ContextTypes.DEFAULT_TYPE) -> N
 
     if state["action"] == "add":
         list_name = state["list_name"]
-        owner_chat_id = resolve_list_owner(chat_id, list_name) or chat_id
+        owner_chat_id = db.resolve_list_owner(chat_id, list_name) or chat_id
         user_name = msg.from_user.full_name if msg.from_user else ""
-        upsert_user(msg.from_user.id, user_name)
-        position = add_prompt(owner_chat_id, list_name, user_text, added_by_id=msg.from_user.id)
+        db.upsert_user(msg.from_user.id, user_name)
+        position = db.add_prompt(owner_chat_id, list_name, user_text, added_by_id=msg.from_user.id)
         await _cleanup_reply_messages(context.bot, chat_id, prompt_msg_id, msg.message_id)
         await _notify(
             context.bot, chat_id,
@@ -463,7 +441,7 @@ async def reply_handler(update: Update, context: ContextTypes.DEFAULT_TYPE) -> N
 
     elif state["action"] == "remove":
         list_name = state["list_name"]
-        owner_chat_id = resolve_list_owner(chat_id, list_name) or chat_id
+        owner_chat_id = db.resolve_list_owner(chat_id, list_name) or chat_id
         if not user_text.isdigit():
             await _cleanup_reply_messages(context.bot, chat_id, prompt_msg_id, msg.message_id)
             text, markup = _render_list_view(owner_chat_id, list_name, lang.t("err_not_a_number"))
@@ -472,7 +450,7 @@ async def reply_handler(update: Update, context: ContextTypes.DEFAULT_TYPE) -> N
             )
             return
         position = int(user_text)
-        removed = remove_prompt(owner_chat_id, list_name, position)
+        removed = db.remove_prompt(owner_chat_id, list_name, position)
         await _cleanup_reply_messages(context.bot, chat_id, prompt_msg_id, msg.message_id)
         note = (
             lang.t("notify_removed", position=position, text=removed["text"])
@@ -484,7 +462,7 @@ async def reply_handler(update: Update, context: ContextTypes.DEFAULT_TYPE) -> N
 
     elif state["action"] == "edit":
         list_name = state["list_name"]
-        owner_chat_id = resolve_list_owner(chat_id, list_name) or chat_id
+        owner_chat_id = db.resolve_list_owner(chat_id, list_name) or chat_id
         parts = user_text.split(None, 1)
         if parts[0].lower() == "rename":
             new_name = parts[1].strip() if len(parts) > 1 else ""
@@ -495,7 +473,7 @@ async def reply_handler(update: Update, context: ContextTypes.DEFAULT_TYPE) -> N
                     text, chat_id=chat_id, message_id=panel_msg_id, reply_markup=markup, parse_mode="Markdown"
                 )
                 return
-            renamed = rename_list(owner_chat_id, list_name, new_name)
+            renamed = db.rename_list(owner_chat_id, list_name, new_name)
             if renamed:
                 await _notify(
                     context.bot, chat_id,
@@ -521,7 +499,7 @@ async def reply_handler(update: Update, context: ContextTypes.DEFAULT_TYPE) -> N
             return
         position, new_text = int(parts[0]), parts[1].strip()
         user_name = msg.from_user.full_name if msg.from_user else ""
-        updated = edit_prompt(owner_chat_id, list_name, position, new_text)
+        updated = db.edit_prompt(owner_chat_id, list_name, position, new_text)
         await _cleanup_reply_messages(context.bot, chat_id, prompt_msg_id, msg.message_id)
         if updated:
             await _notify(
@@ -543,7 +521,7 @@ async def reply_handler(update: Update, context: ContextTypes.DEFAULT_TYPE) -> N
 
     elif state["action"] == "share_invite":
         list_name = state["list_name"]
-        owner_chat_id = resolve_list_owner(chat_id, list_name) or chat_id
+        owner_chat_id = db.resolve_list_owner(chat_id, list_name) or chat_id
         await _cleanup_reply_messages(context.bot, chat_id, prompt_msg_id, msg.message_id)
         if not user_text.lstrip("-").isdigit():
             text, markup = _render_share_panel(chat_id, list_name, owner_chat_id)
@@ -552,12 +530,12 @@ async def reply_handler(update: Update, context: ContextTypes.DEFAULT_TYPE) -> N
             )
             return
         guest_id = int(user_text)
-        from database import get_connection
+        from db.database import get_connection
         with get_connection() as conn:
             row = conn.execute(
                 "SELECT id FROM lists WHERE chat_id=? AND list_name=?", (owner_chat_id, list_name)
             ).fetchone()
-        if row and add_list_share(row["id"], guest_id):
+        if row and db.add_list_share(row["id"], guest_id):
             note = lang.t("confirm_invite_ok", chat_id=guest_id, list_name=list_name)
         else:
             note = lang.t("err_invite_failed", chat_id=guest_id)
@@ -568,7 +546,7 @@ async def reply_handler(update: Update, context: ContextTypes.DEFAULT_TYPE) -> N
 
     elif state["action"] == "share_remove":
         list_name = state["list_name"]
-        owner_chat_id = resolve_list_owner(chat_id, list_name) or chat_id
+        owner_chat_id = db.resolve_list_owner(chat_id, list_name) or chat_id
         await _cleanup_reply_messages(context.bot, chat_id, prompt_msg_id, msg.message_id)
         if not user_text.lstrip("-").isdigit():
             text, markup = _render_share_panel(chat_id, list_name, owner_chat_id)
@@ -577,12 +555,12 @@ async def reply_handler(update: Update, context: ContextTypes.DEFAULT_TYPE) -> N
             )
             return
         guest_id = int(user_text)
-        from database import get_connection
+        from db.database import get_connection
         with get_connection() as conn:
             row = conn.execute(
                 "SELECT id FROM lists WHERE chat_id=? AND list_name=?", (owner_chat_id, list_name)
             ).fetchone()
-        if row and remove_list_share(row["id"], guest_id):
+        if row and db.remove_list_share(row["id"], guest_id):
             note = lang.t("confirm_remove_guest_ok", chat_id=guest_id, list_name=list_name)
         else:
             note = lang.t("err_remove_guest_failed", chat_id=guest_id)
@@ -593,7 +571,7 @@ async def reply_handler(update: Update, context: ContextTypes.DEFAULT_TYPE) -> N
 
     elif state["action"] == "share_transfer":
         list_name = state["list_name"]
-        owner_chat_id = resolve_list_owner(chat_id, list_name) or chat_id
+        owner_chat_id = db.resolve_list_owner(chat_id, list_name) or chat_id
         await _cleanup_reply_messages(context.bot, chat_id, prompt_msg_id, msg.message_id)
         if not user_text.lstrip("-").isdigit():
             text, markup = _render_share_panel(chat_id, list_name, owner_chat_id)
@@ -602,12 +580,12 @@ async def reply_handler(update: Update, context: ContextTypes.DEFAULT_TYPE) -> N
             )
             return
         new_owner_id = int(user_text)
-        from database import get_connection
+        from db.database import get_connection
         with get_connection() as conn:
             row = conn.execute(
                 "SELECT id FROM lists WHERE chat_id=? AND list_name=?", (owner_chat_id, list_name)
             ).fetchone()
-        if row and transfer_list_ownership(row["id"], new_owner_id):
+        if row and db.transfer_list_ownership(row["id"], new_owner_id):
             note = lang.t("confirm_transfer_ok", list_name=list_name, new_owner=new_owner_id)
             text, markup = _render_share_panel(chat_id, list_name, new_owner_id)
         else:
@@ -636,7 +614,7 @@ async def cancel_command(update: Update, context: ContextTypes.DEFAULT_TYPE) -> 
     panel_msg_id = state.get("panel_msg_id")
     if panel_msg_id:
         if list_name:
-            owner_chat_id = resolve_list_owner(chat_id, list_name) or chat_id
+            owner_chat_id = db.resolve_list_owner(chat_id, list_name) or chat_id
             text, markup = _render_list_view(owner_chat_id, list_name)
         else:
             chat_title = msg.chat.title or "Lists"
@@ -653,11 +631,11 @@ async def cancel_command(update: Update, context: ContextTypes.DEFAULT_TYPE) -> 
 async def draw_command(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
     """Draw a random item from the default list."""
     chat_id = update.effective_chat.id
-    list_name = get_default_list(chat_id)
+    list_name = db.get_default_list(chat_id)
     if not list_name:
         await update.message.reply_text(lang.t("err_no_default"), parse_mode="Markdown")
         return
-    owner_chat_id = resolve_list_owner(chat_id, list_name) or chat_id
+    owner_chat_id = db.resolve_list_owner(chat_id, list_name) or chat_id
     user_name = update.message.from_user.full_name if update.message.from_user else "Someone"
     if not await _do_draw(
         context.bot, owner_chat_id, list_name, user_name, update.message.message_thread_id, notify_chat_id=chat_id
@@ -670,7 +648,7 @@ async def draw_command(update: Update, context: ContextTypes.DEFAULT_TYPE) -> No
 async def add_command(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
     """Add an item to the default list. Usage: /add <item text>"""
     chat_id = update.effective_chat.id
-    list_name = get_default_list(chat_id)
+    list_name = db.get_default_list(chat_id)
     if not list_name:
         await update.message.reply_text(lang.t("err_no_default"), parse_mode="Markdown")
         return
@@ -678,10 +656,10 @@ async def add_command(update: Update, context: ContextTypes.DEFAULT_TYPE) -> Non
     if not text:
         await update.message.reply_text(lang.t("err_add_usage"), parse_mode="Markdown")
         return
-    owner_chat_id = resolve_list_owner(chat_id, list_name) or chat_id
+    owner_chat_id = db.resolve_list_owner(chat_id, list_name) or chat_id
     user_name = update.message.from_user.full_name if update.message.from_user else ""
-    upsert_user(update.message.from_user.id, user_name)
-    position = add_prompt(owner_chat_id, list_name, text, added_by_id=update.message.from_user.id)
+    db.upsert_user(update.message.from_user.id, user_name)
+    position = db.add_prompt(owner_chat_id, list_name, text, added_by_id=update.message.from_user.id)
     await update.message.delete()
     await _notify(
         context.bot, chat_id,
@@ -718,7 +696,7 @@ def main() -> None:
     parser.add_argument("--lang", default="", help="Locale to use (default: BOT_LANG env var or 'en')")
     args = parser.parse_args()
     lang.load_locale(args.lang)
-    init_db()
+    db.init_db()
     token = load_token()
     # Create the Application
     application = Application.builder().token(token).build()

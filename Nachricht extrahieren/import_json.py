@@ -8,7 +8,7 @@ from pathlib import Path
 
 _ROOT = Path(__file__).parent.parent
 sys.path.insert(0, str(_ROOT))
-import database  # noqa: E402
+import db.database as database  # noqa: E402
 
 _DEFAULT_DB = Path(__file__).parent / "listbot.db"
 
