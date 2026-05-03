@@ -37,7 +37,7 @@ BOT_TOKEN=your_token_here
 
 ```bash
 pip install -r requirements.txt
-python ListBot.py
+python main.py
 ```
 
 Requires Python 3.10+.
@@ -58,7 +58,7 @@ The bot ships in English and German. Defaults to English.
 
 **Direct run** — use the `--lang` flag:
 ```bash
-python ListBot.py --lang de
+python main.py --lang de
 ```
 
 **Docker Compose** — add `BOT_LANG` to the `environment` section in `docker-compose.yml`:
@@ -68,7 +68,7 @@ environment:
   - BOT_LANG=de
 ```
 
-To add a new language, copy `locales/en.json`, translate the values, and save it as `locales/<lang>.json`.
+To add a new language, copy `i18n/locales/en.json`, translate the values, and save it as `i18n/locales/<lang>.json`.
 
 ## Requirements
 

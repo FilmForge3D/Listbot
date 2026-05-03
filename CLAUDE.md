@@ -6,11 +6,11 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 **Listbot** is a Telegram bot for managing writing prompt lists in group chats, plus tooling to migrate data from the legacy bot.
 
-1. **ListBot.py** — The active bot. Manages named prompt lists per chat with inline-keyboard UI, SQLite persistence, localization, and Docker deployment support.
+1. **main.py** — Entry point. Parses args, loads locale, initialises DB, builds the Application, registers handlers, starts polling.
 
-2. **database.py** — SQLite data layer (lists, prompts, users, shares).
+2. **db/** — SQLite data layer split by entity: `connection`, `schema`, `lists`, `prompts`, `users`, `shares`, `settings`.
 
-3. **strings.py** + **locales/** — Localization system (English + German).
+3. **i18n/** — Localization package (`strings.py` + `locales/en.json`, `locales/de.json`). English + German.
 
 4. **Nachricht extrahieren/extract_telegram.py** — Extracts and deduplicates ListBot messages from Telegram chat exports (used for migration from the legacy bot).
 
@@ -20,24 +20,52 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 ```
 Listbot/
-├── ListBot.py                      # Active Telegram bot (python-telegram-bot 22.x)
-├── database.py                     # SQLite data layer
-├── strings.py                      # Localization loader
-├── locales/
-│   ├── en.json                     # English strings
-│   └── de.json                     # German strings
+├── main.py                         # Entry point (python-telegram-bot 22.x)
+├── config.py                       # load_token(), DATA_DIR
+├── messaging.py                    # _notify, _force_reply_msg, _send_force_reply, _cleanup_reply_messages
+├── text.py                         # _first_name
+├── actions.py                      # _do_draw
+│
+├── i18n/
+│   ├── __init__.py                 # exports load_locale, t
+│   ├── strings.py
+│   └── locales/
+│       ├── en.json                 # English strings
+│       └── de.json                 # German strings
+│
+├── db/
+│   ├── __init__.py                 # re-exports public API
+│   ├── connection.py               # get_connection(), DB_PATH
+│   ├── schema.py                   # init_db()
+│   ├── lists.py
+│   ├── prompts.py
+│   ├── users.py
+│   ├── shares.py
+│   └── settings.py
+│
+├── ui/
+│   ├── __init__.py
+│   └── views.py                    # render_lists_view, render_list_view, render_share_panel
+│
+├── handlers/
+│   ├── __init__.py                 # register_handlers(application)
+│   ├── commands.py                 # /draw /add /lb /help /cancel
+│   ├── callbacks.py                # button_handler
+│   └── replies.py                  # reply_handler
+│
 ├── Dockerfile                      # Container image definition
 ├── docker-compose.yml              # Compose deployment config
-├── requirements.txt                # Python dependencies
+├── pyproject.toml                  # Dependencies + ruff/mypy config
+├── requirements.txt                # pip-compatible dep list
 ├── example.token.txt               # Token file template
 ├── token.txt                       # Bot token (gitignored)
 ├── listbot.db                      # SQLite database (gitignored)
 ├── Listbot.code-workspace          # VS Code workspace
-├── Nachricht extrahieren/          # Migration tooling
-│   ├── extract_telegram.py         # Extracts messages from Telegram export JSON
-│   ├── import_json.py              # Imports extracted data into listbot.db
-│   ├── result.json                 # Sample Telegram export input
-│   └── ergebnis.json               # Example extraction output
+├── Nachricht extrahieren/          # Migration tooling (moving to private branch)
+│   ├── extract_telegram.py
+│   ├── import_json.py
+│   ├── result.json
+│   └── ergebnis.json
 ├── venv/                           # Python 3.12 virtual environment
 ├── .gitignore
 └── CLAUDE.md
@@ -45,7 +73,7 @@ Listbot/
 
 ## Repository Plans
 
-The bot (`ListBot.py`, `database.py`, `strings.py`, `locales/`, `Dockerfile`, `docker-compose.yml`, `requirements.txt`) will be made **public**. The migration tooling (`Nachricht extrahieren/`) will be moved to a **private branch**, as it was only ever used for a single deployment and is not relevant to general users.
+The bot (`main.py`, `config.py`, `messaging.py`, `text.py`, `actions.py`, `db/`, `i18n/`, `ui/`, `handlers/`, `Dockerfile`, `docker-compose.yml`, `pyproject.toml`) will be made **public**. The migration tooling (`Nachricht extrahieren/`) will be moved to a **private branch**, as it was only ever used for a single deployment and is not relevant to general users.
 
 ## Migration Strategy
 
@@ -90,17 +118,17 @@ Input follows Telegram's official export JSON:
 
 Reads the JSON output from `extract_telegram.py` and upserts prompts into `listbot.db` via `database.py`. Handles user deduplication (keeps the longest name per user ID).
 
-## Component 3: ListBot.py (Active Bot)
+## Component 3: Bot (Active)
 
 **Status**: Active. Full-featured bot using `python-telegram-bot~=22.7` with async handlers.
 
 ### Architecture
 
-- **Entry point**: `main()` builds the `Application`, registers handlers, starts polling
-- **UI layer**: Inline keyboards (`InlineKeyboardMarkup`) for list/prompt browsing; `ForceReply` for text input
-- **Data layer**: All persistence goes through `database.py` (SQLite, `listbot.db`)
-- **Localization**: All user-visible strings via `strings.py` / `locales/*.json`
-- **Token loading**: `BOT_TOKEN` env var → `token.txt` fallback
+- **Entry point**: `main.py` — builds the `Application`, registers handlers, starts polling
+- **UI layer**: Inline keyboards (`InlineKeyboardMarkup`) for list/prompt browsing; `ForceReply` for text input (`ui/views.py`)
+- **Data layer**: All persistence goes through `db/` (SQLite, `listbot.db`)
+- **Localization**: All user-visible strings via `i18n/` (`strings.py` + `locales/*.json`)
+- **Token loading**: `config.py` — `BOT_TOKEN` env var → `token.txt` fallback
 - **Deployment**: Docker (`Dockerfile` + `docker-compose.yml`); database stored in `/app/data/`
 
 ### Key Handlers
@@ -123,13 +151,13 @@ Reads the JSON output from `extract_telegram.py` and upserts prompts into `listb
 
 ## Running the Tools
 
-### ListBot.py
+### Bot (main.py)
 
 ```bash
 pip install -r requirements.txt
 
 # Run directly
-python ListBot.py
+python main.py
 
 # Run via Docker
 docker-compose up --build
@@ -202,11 +230,29 @@ All files use UTF-8 (necessary for German locale strings and code comments).
 
 ### Code Style
 
-- **ListBot.py / database.py / strings.py**: Modern Python 3.12; type hints, f-strings, async/await, full type annotations
-- **extract_telegram.py / import_json.py**: Same modern style; union types (`X | Y`)
+All bot modules use Python 3.10+ style: type hints, f-strings, `async/await`, union types (`X | Y` not `Optional[X]`).
+
+**Imports**
+- Standard library → third-party → local; one blank line between groups.
+- Use module-level imports for `db` and `i18n`: `import db` / `import i18n as lang`. Call as `db.foo()` / `lang.t()`.
+- Use direct function imports for other local modules: `from messaging import notify`, `from text import first_name`.
+- Inside `db/` submodules, import from siblings directly: `from db.connection import get_connection`.
+
+**Naming**
+- Drop leading underscores when a helper moves to its own module — it is now a public API (`notify`, not `_notify`; `render_lists_view`, not `_render_lists_view`).
+- Keep leading underscores only for genuinely private helpers that are not meant to be imported by other modules.
+
+**Package `__init__.py`**
+- Re-export the public API explicitly with `__all__`. Consumers always import from the package root (`from db import init_db`), never from submodules directly.
+
+**Docstrings**
+- Single-line docstring on every public function. No multi-line docstring blocks.
+
+**Comments**
+- No inline comments explaining what the code does. A comment is only warranted when the *why* is non-obvious (hidden constraint, workaround, subtle invariant).
 
 ## Python Version
 
 - **VirtualEnv**: Python 3.12.10 (`venv/pyvenv.cfg`)
-- **ListBot.py**: Requires Python 3.10+; `python-telegram-bot~=22.7`
+- **Bot** (`main.py` + modules): Requires Python 3.10+; `python-telegram-bot~=22.7`
 - **extract_telegram.py / import_json.py**: Require Python 3.10+ (union type syntax)
