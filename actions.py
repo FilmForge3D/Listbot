@@ -1,3 +1,5 @@
+from telegram import Bot
+
 import db
 import i18n as lang
 from messaging import notify
@@ -5,7 +7,7 @@ from text import first_name
 
 
 async def do_draw(
-    bot, chat_id: int, list_name: str, user_name: str, thread_id: int | None, notify_chat_id: int | None = None
+    bot: Bot, chat_id: int, list_name: str, user_name: str, thread_id: int | None, notify_chat_id: int | None = None
 ) -> bool:
     """Draw a random prompt and notify. chat_id is the list owner; notify_chat_id is where to send the result."""
     prompt = db.draw_random_prompt(chat_id, list_name)

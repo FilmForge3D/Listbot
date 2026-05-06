@@ -123,17 +123,17 @@ Heavy boilerplate repetition: `with get_connection() as conn: row = conn.execute
 
 | File | Function | Verdict | Notes |
 |---|---|---|---|
-| [messaging.py:7](messaging.py#L7) | `notify` | | |
-| [messaging.py:12](messaging.py#L12) | `force_reply_msg` | | |
-| [messaging.py:26](messaging.py#L26) | `send_force_reply` | | |
-| [messaging.py:56](messaging.py#L56) | `cleanup_reply_messages` | | |
-| [actions.py:7](actions.py#L7) | `do_draw` | | |
+| [messaging.py:7](messaging.py#L7) | `notify` | cleanup | Added `Bot` type hint to `bot` parameter |
+| [messaging.py:12](messaging.py#L12) | `force_reply_msg` | cleanup | Added `User` type hint to `user` parameter |
+| [messaging.py:26](messaging.py#L26) | `send_force_reply` | cleanup | Added `User` type hint; tightened `state` to `dict[str, str \| int]` |
+| [messaging.py:56](messaging.py#L56) | `cleanup_reply_messages` | cleanup | Added `Bot` type hint to `bot` parameter |
+| [actions.py:7](actions.py#L7) | `do_draw` | cleanup | Added `Bot` type hint to `bot` parameter |
 
-- [ ] messaging.notify
-- [ ] messaging.force_reply_msg
-- [ ] messaging.send_force_reply
-- [ ] messaging.cleanup_reply_messages
-- [ ] actions.do_draw
+- [x] messaging.notify
+- [x] messaging.force_reply_msg
+- [x] messaging.send_force_reply
+- [x] messaging.cleanup_reply_messages
+- [x] actions.do_draw
 
 ---
 

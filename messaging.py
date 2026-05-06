@@ -1,15 +1,15 @@
-from telegram import ForceReply, MessageEntity
+from telegram import Bot, ForceReply, MessageEntity, User
 from telegram.ext import ContextTypes
 
 import i18n as lang
 
 
-async def notify(bot, chat_id: int, text: str, thread_id: int | None) -> None:
+async def notify(bot: Bot, chat_id: int, text: str, thread_id: int | None) -> None:
     """Send an HTML notification to the correct chat thread."""
     await bot.send_message(chat_id, text, parse_mode="HTML", message_thread_id=thread_id)
 
 
-def force_reply_msg(user, body: str, bold_text: str) -> tuple[str, list[MessageEntity]]:
+def force_reply_msg(user: User, body: str, bold_text: str) -> tuple[str, list[MessageEntity]]:
     """Build plain text + entities for a selective ForceReply prompt."""
     name = user.full_name
     text = f"{name}, {body}"
@@ -28,7 +28,7 @@ async def send_force_reply(
     chat_id: int,
     thread_id: int | None,
     panel_msg_id: int,
-    user,
+    user: User,
     action: str,
     body: str,
     bold_text: str = "",
@@ -43,7 +43,7 @@ async def send_force_reply(
         entities=entities,
         message_thread_id=thread_id,
     )
-    state: dict = {
+    state: dict[str, str | int] = {
         "action": action,
         "panel_msg_id": panel_msg_id,
         "prompt_msg_id": prompt_msg.message_id,
@@ -53,7 +53,7 @@ async def send_force_reply(
     context.chat_data[f"user:{user.id}"] = state
 
 
-async def cleanup_reply_messages(bot, chat_id: int, prompt_msg_id: int, user_msg_id: int) -> None:
+async def cleanup_reply_messages(bot: Bot, chat_id: int, prompt_msg_id: int, user_msg_id: int) -> None:
     """Delete the ForceReply prompt and the user's reply from chat."""
     await bot.delete_message(chat_id, prompt_msg_id)
     await bot.delete_message(chat_id, user_msg_id)
