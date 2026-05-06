@@ -20,5 +20,6 @@ def load_locale(lang: str = "") -> None:
 
 
 def t(key: str, **kwargs: object) -> str:
+    """Return the locale string for key, formatted with kwargs; returns key itself if not found."""
     s = _T.get(key, key)
     return s.format(**kwargs) if kwargs else s
