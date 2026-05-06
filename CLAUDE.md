@@ -188,6 +188,7 @@ python migration/extract_telegram.py input.json --bot-name "MyBot" --output-json
 
 - **Commit on command**: When the user says "commit", create a git commit immediately — no confirmation needed. The user has already reviewed and verified the feature before issuing the command.
 - **Keep changes synced**: Stage and commit only the files relevant to the feature being committed.
+- **Suggest commit message**: Suggest a commit message when everything is done. The user can copy and paste it into the aktive commit or write their own.
 
 ## AI Collaboration Rules
 

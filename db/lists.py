@@ -32,17 +32,16 @@ def get_list_names(chat_id: int) -> list[str]:
 def rename_list(chat_id: int, old_name: str, new_name: str) -> bool:
     """Rename a list, updating the default setting if needed. Returns False if not found or name taken."""
     with get_connection() as conn:
-        row = conn.execute("SELECT id FROM lists WHERE chat_id=? AND list_name=?", (chat_id, old_name)).fetchone()
+        row = conn.execute("SELECT id FROM lists WHERE chat_id = ? AND list_name = ?", (chat_id, old_name)).fetchone()
         if not row:
             return False
-        if conn.execute("SELECT id FROM lists WHERE chat_id=? AND list_name=?", (chat_id, new_name)).fetchone():
+        if conn.execute("SELECT id FROM lists WHERE chat_id = ? AND list_name = ?", (chat_id, new_name)).fetchone():
             return False
-        conn.execute("UPDATE lists SET list_name=? WHERE id=?", (new_name, row["id"]))
+        conn.execute("UPDATE lists SET list_name = ? WHERE id = ?", (new_name, row["id"]))
         conn.execute(
-            "UPDATE chat_settings SET default_list=? WHERE chat_id=? AND default_list=?",
+            "UPDATE chat_settings SET default_list = ? WHERE chat_id = ? AND default_list = ?",
             (new_name, chat_id, old_name),
         )
-        conn.commit()
         return True
 
 
@@ -59,5 +58,4 @@ def delete_list(chat_id: int, list_name: str) -> bool:
         if count > 0:
             return False
         conn.execute("DELETE FROM lists WHERE id = ?", (row["id"],))
-        conn.commit()
         return True

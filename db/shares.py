@@ -11,7 +11,6 @@ def add_list_share(list_id: int, guest_chat_id: int) -> bool:
                 "INSERT INTO list_shares (list_id, guest_chat_id) VALUES (?, ?)",
                 (list_id, guest_chat_id),
             )
-            conn.commit()
             return True
         except sqlite3.IntegrityError:
             return False
@@ -24,7 +23,6 @@ def remove_list_share(list_id: int, guest_chat_id: int) -> bool:
             "DELETE FROM list_shares WHERE list_id = ? AND guest_chat_id = ?",
             (list_id, guest_chat_id),
         )
-        conn.commit()
         return cur.rowcount > 0
 
 
@@ -69,7 +67,6 @@ def transfer_list_ownership(list_id: int, new_owner_chat_id: int) -> bool:
             "DELETE FROM list_shares WHERE list_id = ? AND guest_chat_id = ?",
             (list_id, new_owner_chat_id),
         )
-        conn.commit()
         return True
 
 

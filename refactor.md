@@ -69,53 +69,53 @@ Heavy boilerplate repetition: `with get_connection() as conn: row = conn.execute
 
 | File | Function | Verdict | Notes |
 |---|---|---|---|
-| [db/connection.py:8](db/connection.py#L8) | `get_connection` | | |
-| [db/schema.py:8](db/schema.py#L8) | `init_db` | | |
-| [db/users.py:4](db/users.py#L4) | `upsert_user` | | |
-| [db/users.py:14](db/users.py#L14) | `lookup_name` | | |
-| [db/settings.py:4](db/settings.py#L4) | `get_default_list` | | |
-| [db/settings.py:14](db/settings.py#L14) | `set_default_list` | | |
-| [db/lists.py:6](db/lists.py#L6) | `_get_or_create_list` | | leading underscore — confirm it stays private |
-| [db/lists.py:22](db/lists.py#L22) | `get_list_names` | | |
-| [db/lists.py:32](db/lists.py#L32) | `rename_list` | | |
-| [db/lists.py:49](db/lists.py#L49) | `delete_list` | | |
-| [db/shares.py:6](db/shares.py#L6) | `add_list_share` | | |
-| [db/shares.py:20](db/shares.py#L20) | `remove_list_share` | | |
-| [db/shares.py:31](db/shares.py#L31) | `get_list_shares` | | |
-| [db/shares.py:41](db/shares.py#L41) | `get_shared_lists` | | |
-| [db/shares.py:53](db/shares.py#L53) | `transfer_list_ownership` | | |
-| [db/shares.py:76](db/shares.py#L76) | `resolve_list_owner` | | |
-| [db/prompts.py:8](db/prompts.py#L8) | `add_prompt` | | |
-| [db/prompts.py:25](db/prompts.py#L25) | `get_prompts` | | |
-| [db/prompts.py:40](db/prompts.py#L40) | `draw_random_prompt` | | weighted-draw logic; check for extraction |
-| [db/prompts.py:71](db/prompts.py#L71) | `get_recently_drawn_prompts` | | |
-| [db/prompts.py:91](db/prompts.py#L91) | `get_stats` | | 36 LOC, 5 queries — candidate for inline helpers |
-| [db/prompts.py:127](db/prompts.py#L127) | `edit_prompt` | | |
-| [db/prompts.py:145](db/prompts.py#L145) | `remove_prompt` | | |
+| [db/connection.py:8](db/connection.py#L8) | `get_connection` | keep | Clean; no changes needed |
+| [db/schema.py:8](db/schema.py#L8) | `init_db` | cleanup | Narrowed `except Exception` → `OperationalError`; moved `DB_PATH` import to module level; removed redundant `conn.commit()` |
+| [db/users.py:4](db/users.py#L4) | `upsert_user` | cleanup | Removed redundant `conn.commit()` (context manager auto-commits) |
+| [db/users.py:14](db/users.py#L14) | `lookup_name` | keep | Clean; no changes needed |
+| [db/settings.py:4](db/settings.py#L4) | `get_default_list` | keep | Clean; no changes needed |
+| [db/settings.py:14](db/settings.py#L14) | `set_default_list` | cleanup | Removed redundant `conn.commit()` |
+| [db/lists.py:6](db/lists.py#L6) | `_get_or_create_list` | keep | Clean; leading underscore correct — takes `conn`, not public API |
+| [db/lists.py:22](db/lists.py#L22) | `get_list_names` | keep | Clean; no changes needed |
+| [db/lists.py:32](db/lists.py#L32) | `rename_list` | cleanup | Fixed SQL spacing (`chat_id=?` → `chat_id = ?`); removed redundant `conn.commit()` |
+| [db/lists.py:49](db/lists.py#L49) | `delete_list` | cleanup | Removed redundant `conn.commit()` |
+| [db/shares.py:6](db/shares.py#L6) | `add_list_share` | cleanup | Removed redundant `conn.commit()` |
+| [db/shares.py:20](db/shares.py#L20) | `remove_list_share` | cleanup | Removed redundant `conn.commit()` |
+| [db/shares.py:31](db/shares.py#L31) | `get_list_shares` | keep | Clean; no changes needed |
+| [db/shares.py:41](db/shares.py#L41) | `get_shared_lists` | keep | Clean; no changes needed |
+| [db/shares.py:53](db/shares.py#L53) | `transfer_list_ownership` | cleanup | Removed redundant `conn.commit()` |
+| [db/shares.py:76](db/shares.py#L76) | `resolve_list_owner` | keep | Clean; no changes needed |
+| [db/prompts.py:8](db/prompts.py#L8) | `add_prompt` | cleanup | Removed redundant `conn.commit()` |
+| [db/prompts.py:25](db/prompts.py#L25) | `get_prompts` | keep | Clean; no changes needed |
+| [db/prompts.py:40](db/prompts.py#L40) | `draw_random_prompt` | cleanup | Removed redundant `conn.commit()` |
+| [db/prompts.py:71](db/prompts.py#L71) | `get_recently_drawn_prompts` | keep | Clean; no changes needed |
+| [db/prompts.py:91](db/prompts.py#L91) | `get_stats` | keep | Clean; no changes needed |
+| [db/prompts.py:127](db/prompts.py#L127) | `edit_prompt` | cleanup | Removed redundant `conn.commit()` |
+| [db/prompts.py:145](db/prompts.py#L145) | `remove_prompt` | cleanup | Removed redundant `conn.commit()` |
 
-- [ ] db.connection.get_connection
-- [ ] db.schema.init_db
-- [ ] db.users.upsert_user
-- [ ] db.users.lookup_name
-- [ ] db.settings.get_default_list
-- [ ] db.settings.set_default_list
-- [ ] db.lists._get_or_create_list
-- [ ] db.lists.get_list_names
-- [ ] db.lists.rename_list
-- [ ] db.lists.delete_list
-- [ ] db.shares.add_list_share
-- [ ] db.shares.remove_list_share
-- [ ] db.shares.get_list_shares
-- [ ] db.shares.get_shared_lists
-- [ ] db.shares.transfer_list_ownership
-- [ ] db.shares.resolve_list_owner
-- [ ] db.prompts.add_prompt
-- [ ] db.prompts.get_prompts
-- [ ] db.prompts.draw_random_prompt
-- [ ] db.prompts.get_recently_drawn_prompts
-- [ ] db.prompts.get_stats
-- [ ] db.prompts.edit_prompt
-- [ ] db.prompts.remove_prompt
+- [x] db.connection.get_connection
+- [x] db.schema.init_db
+- [x] db.users.upsert_user
+- [x] db.users.lookup_name
+- [x] db.settings.get_default_list
+- [x] db.settings.set_default_list
+- [x] db.lists._get_or_create_list
+- [x] db.lists.get_list_names
+- [x] db.lists.rename_list
+- [x] db.lists.delete_list
+- [x] db.shares.add_list_share
+- [x] db.shares.remove_list_share
+- [x] db.shares.get_list_shares
+- [x] db.shares.get_shared_lists
+- [x] db.shares.transfer_list_ownership
+- [x] db.shares.resolve_list_owner
+- [x] db.prompts.add_prompt
+- [x] db.prompts.get_prompts
+- [x] db.prompts.draw_random_prompt
+- [x] db.prompts.get_recently_drawn_prompts
+- [x] db.prompts.get_stats
+- [x] db.prompts.edit_prompt
+- [x] db.prompts.remove_prompt
 
 ---
 

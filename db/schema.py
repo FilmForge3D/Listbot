@@ -1,6 +1,7 @@
 import logging
+import sqlite3
 
-from db.connection import get_connection
+from db.connection import DB_PATH, get_connection
 
 logger = logging.getLogger(__name__)
 
@@ -51,9 +52,6 @@ def init_db() -> None:
         """)
         try:
             conn.execute("ALTER TABLE prompts ADD COLUMN added_by_id INTEGER REFERENCES users(user_id)")
-        except Exception:
+        except sqlite3.OperationalError:
             pass
-        conn.commit()
-    from db.connection import DB_PATH
-
     logger.info("Database initialised at %s", DB_PATH)

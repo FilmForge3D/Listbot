@@ -8,7 +8,6 @@ def upsert_user(user_id: int, name: str) -> None:
             "INSERT INTO users (user_id, name) VALUES (?, ?) ON CONFLICT(user_id) DO UPDATE SET name = excluded.name",
             (user_id, name),
         )
-        conn.commit()
 
 
 def lookup_name(entity_id: int) -> str | None:

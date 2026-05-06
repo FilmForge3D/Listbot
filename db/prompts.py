@@ -18,22 +18,18 @@ def add_prompt(chat_id: int, list_name: str, text: str, added_by_id: int | None 
             "INSERT INTO prompts (list_id, position, text, added_by_id) VALUES (?, ?, ?, ?)",
             (list_id, position, text, added_by_id),
         )
-        conn.commit()
         return position
 
 
 def get_prompts(chat_id: int, list_name: str) -> list[sqlite3.Row]:
     """Return all prompts for a list ordered by position."""
     with get_connection() as conn:
-        row = conn.execute(
-            "SELECT id FROM lists WHERE chat_id = ? AND list_name = ?",
-            (chat_id, list_name),
-        ).fetchone()
-        if not row:
+        list_id = _resolve_list_id(conn, chat_id, list_name)
+        if list_id is None:
             return []
         return conn.execute(
             "SELECT * FROM prompts WHERE list_id = ? ORDER BY position",
-            (row["id"],),
+            (list_id,),
         ).fetchall()
 
 
@@ -43,13 +39,9 @@ def draw_random_prompt(chat_id: int, list_name: str) -> sqlite3.Row | None:
     Weight = 1 / (draw_count + 1), so each draw lowers the probability of being picked again.
     """
     with get_connection() as conn:
-        row = conn.execute(
-            "SELECT id FROM lists WHERE chat_id = ? AND list_name = ?",
-            (chat_id, list_name),
-        ).fetchone()
-        if not row:
+        list_id = _resolve_list_id(conn, chat_id, list_name)
+        if list_id is None:
             return None
-        list_id = row["id"]
         prompts = conn.execute(
             "SELECT p.*, u.name AS added_by_name FROM prompts p"
             " LEFT JOIN users u ON p.added_by_id = u.user_id"
@@ -64,7 +56,6 @@ def draw_random_prompt(chat_id: int, list_name: str) -> sqlite3.Row | None:
             "UPDATE prompts SET drawn = drawn + 1, drawn_at = datetime('now') WHERE id = ?",
             (prompt["id"],),
         )
-        conn.commit()
         return prompt
 
 
@@ -73,31 +64,24 @@ def get_recently_drawn_prompts(
 ) -> list[sqlite3.Row]:
     """Return up to `limit` prompts drawn within the last `max_age_days` days, most recent first."""
     with get_connection() as conn:
-        row = conn.execute(
-            "SELECT id FROM lists WHERE chat_id = ? AND list_name = ?",
-            (chat_id, list_name),
-        ).fetchone()
-        if not row:
+        list_id = _resolve_list_id(conn, chat_id, list_name)
+        if list_id is None:
             return []
         return conn.execute(
             "SELECT text, drawn_at FROM prompts"
             " WHERE list_id = ? AND drawn_at IS NOT NULL"
             " AND drawn_at >= datetime('now', ?)"
             " ORDER BY drawn_at DESC LIMIT ?",
-            (row["id"], f"-{max_age_days} days", limit),
+            (list_id, f"-{max_age_days} days", limit),
         ).fetchall()
 
 
 def get_stats(chat_id: int, list_name: str) -> dict | None:
     """Return statistics for a list, or None if the list does not exist."""
     with get_connection() as conn:
-        row = conn.execute(
-            "SELECT id FROM lists WHERE chat_id = ? AND list_name = ?",
-            (chat_id, list_name),
-        ).fetchone()
-        if not row:
+        list_id = _resolve_list_id(conn, chat_id, list_name)
+        if list_id is None:
             return None
-        list_id = row["id"]
         total = conn.execute("SELECT COUNT(*) FROM prompts WHERE list_id = ?", (list_id,)).fetchone()[0]
         total_draws = conn.execute(
             "SELECT COALESCE(SUM(drawn), 0) FROM prompts WHERE list_id = ?", (list_id,)
@@ -127,31 +111,22 @@ def get_stats(chat_id: int, list_name: str) -> dict | None:
 def edit_prompt(chat_id: int, list_name: str, position: int, new_text: str) -> bool:
     """Update the text of a prompt by 1-based position. Returns True if a row was updated."""
     with get_connection() as conn:
-        row = conn.execute(
-            "SELECT id FROM lists WHERE chat_id = ? AND list_name = ?",
-            (chat_id, list_name),
-        ).fetchone()
-        if not row:
+        list_id = _resolve_list_id(conn, chat_id, list_name)
+        if list_id is None:
             return False
-        list_id = row["id"]
         cur = conn.execute(
             "UPDATE prompts SET text = ? WHERE list_id = ? AND position = ?",
             (new_text, list_id, position),
         )
-        conn.commit()
         return cur.rowcount > 0
 
 
 def remove_prompt(chat_id: int, list_name: str, position: int) -> dict | None:
     """Remove a prompt by 1-based position. Returns the deleted prompt dict or None."""
     with get_connection() as conn:
-        row = conn.execute(
-            "SELECT id FROM lists WHERE chat_id = ? AND list_name = ?",
-            (chat_id, list_name),
-        ).fetchone()
-        if not row:
+        list_id = _resolve_list_id(conn, chat_id, list_name)
+        if list_id is None:
             return None
-        list_id = row["id"]
         prompt = conn.execute(
             "SELECT text FROM prompts WHERE list_id = ? AND position = ?",
             (list_id, position),
@@ -162,5 +137,13 @@ def remove_prompt(chat_id: int, list_name: str, position: int) -> dict | None:
             "DELETE FROM prompts WHERE list_id = ? AND position = ?",
             (list_id, position),
         )
-        conn.commit()
         return {"text": prompt["text"]}
+
+
+def _resolve_list_id(conn: sqlite3.Connection, chat_id: int, list_name: str) -> int | None:
+    """Return the list id for a given chat and name, or None if not found."""
+    row = conn.execute(
+        "SELECT id FROM lists WHERE chat_id = ? AND list_name = ?",
+        (chat_id, list_name),
+    ).fetchone()
+    return int(row["id"]) if row else None

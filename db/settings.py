@@ -19,4 +19,3 @@ def set_default_list(chat_id: int, list_name: str) -> None:
             " ON CONFLICT(chat_id) DO UPDATE SET default_list = excluded.default_list",
             (chat_id, list_name),
         )
-        conn.commit()
