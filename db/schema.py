@@ -55,4 +55,5 @@ def init_db() -> None:
             pass
         conn.commit()
     from db.connection import DB_PATH
+
     logger.info("Database initialised at %s", DB_PATH)

@@ -25,6 +25,9 @@ def register_handlers(application: Application) -> None:
     application.add_handler(CommandHandler("draw", draw_command))
     application.add_handler(CommandHandler("cancel", cancel_command))
     application.add_handler(CallbackQueryHandler(button_handler))
-    application.add_handler(MessageHandler(
-        filters.REPLY & filters.TEXT & ~filters.COMMAND, reply_handler,
-    ))
+    application.add_handler(
+        MessageHandler(
+            filters.REPLY & filters.TEXT & ~filters.COMMAND,
+            reply_handler,
+        )
+    )

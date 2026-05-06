@@ -55,7 +55,7 @@ async def button_handler(update: Update, context: ContextTypes.DEFAULT_TYPE) -> 
         total = len(prompts)
         drawn = sum(1 for p in prompts if p["drawn"])
         start = page * PAGE_SIZE
-        page_prompts = prompts[start:start + PAGE_SIZE]
+        page_prompts = prompts[start : start + PAGE_SIZE]
         lines = "\n".join(f"{p['position']}. {p['text']}" for p in page_prompts) or lang.t("panel_empty")
         total_pages = max(1, (total + PAGE_SIZE - 1) // PAGE_SIZE)
         paged = lang.t("panel_list_header_paged", total=total, drawn=drawn, page=page + 1, total_pages=total_pages)
@@ -104,34 +104,58 @@ async def button_handler(update: Update, context: ContextTypes.DEFAULT_TYPE) -> 
         list_name = data[7:]
         owner_chat_id = db.resolve_list_owner(chat_id, list_name) or chat_id
         if not db.get_prompts(owner_chat_id, list_name):
-            markup = InlineKeyboardMarkup([[
-                InlineKeyboardButton(lang.t("btn_db.delete_list"), callback_data=f"db.delete_list_confirm:{list_name}"),
-                InlineKeyboardButton(lang.t("btn_back_cancel"), callback_data=f"open:{list_name}"),
-            ]])
+            markup = InlineKeyboardMarkup(
+                [
+                    [
+                        InlineKeyboardButton(
+                            lang.t("btn_db.delete_list"), callback_data=f"db.delete_list_confirm:{list_name}"
+                        ),
+                        InlineKeyboardButton(lang.t("btn_back_cancel"), callback_data=f"open:{list_name}"),
+                    ]
+                ]
+            )
             await query.edit_message_text(
                 lang.t("confirm_delete_prompt", list_name=list_name), reply_markup=markup, parse_mode="Markdown"
             )
             return
         await send_force_reply(
-            context, chat_id, query.message.message_thread_id, query.message.message_id,
-            query.from_user, "remove", lang.t("fr_remove_body", list_name=list_name),
-            list_name, list_name=list_name,
+            context,
+            chat_id,
+            query.message.message_thread_id,
+            query.message.message_id,
+            query.from_user,
+            "remove",
+            lang.t("fr_remove_body", list_name=list_name),
+            list_name,
+            list_name=list_name,
         )
 
     elif data.startswith("edit:"):
         list_name = data[5:]
         await send_force_reply(
-            context, chat_id, query.message.message_thread_id, query.message.message_id,
-            query.from_user, "edit", lang.t("fr_edit_body", list_name=list_name),
-            list_name, list_name=list_name,
+            context,
+            chat_id,
+            query.message.message_thread_id,
+            query.message.message_id,
+            query.from_user,
+            "edit",
+            lang.t("fr_edit_body", list_name=list_name),
+            list_name,
+            list_name=list_name,
         )
 
     elif data.startswith("add:"):
         list_name = data[4:]
         await send_force_reply(
-            context, chat_id, query.message.message_thread_id, query.message.message_id,
-            query.from_user, "add", lang.t("fr_add_body", list_name=list_name),
-            list_name, list_name=list_name,
+            context,
+            chat_id,
+            query.message.message_thread_id,
+            query.message.message_id,
+            query.from_user,
+            "add",
+            lang.t("fr_add_body", list_name=list_name),
+            list_name,
+            list_name=list_name,
         )
 
     elif data.startswith("set_default:"):
@@ -162,25 +186,43 @@ async def button_handler(update: Update, context: ContextTypes.DEFAULT_TYPE) -> 
     elif data.startswith("share_invite:"):
         list_name = data[13:]
         await send_force_reply(
-            context, chat_id, query.message.message_thread_id, query.message.message_id,
-            query.from_user, "share_invite", lang.t("fr_invite_body", chat_id=chat_id, list_name=list_name),
-            list_name, list_name=list_name,
+            context,
+            chat_id,
+            query.message.message_thread_id,
+            query.message.message_id,
+            query.from_user,
+            "share_invite",
+            lang.t("fr_invite_body", chat_id=chat_id, list_name=list_name),
+            list_name,
+            list_name=list_name,
         )
 
     elif data.startswith("share_remove:"):
         list_name = data[13:]
         await send_force_reply(
-            context, chat_id, query.message.message_thread_id, query.message.message_id,
-            query.from_user, "share_remove", lang.t("fr_remove_guest_body", list_name=list_name),
-            list_name, list_name=list_name,
+            context,
+            chat_id,
+            query.message.message_thread_id,
+            query.message.message_id,
+            query.from_user,
+            "share_remove",
+            lang.t("fr_remove_guest_body", list_name=list_name),
+            list_name,
+            list_name=list_name,
         )
 
     elif data.startswith("share_transfer:"):
         list_name = data[15:]
         await send_force_reply(
-            context, chat_id, query.message.message_thread_id, query.message.message_id,
-            query.from_user, "share_transfer", lang.t("fr_transfer_body", list_name=list_name),
-            list_name, list_name=list_name,
+            context,
+            chat_id,
+            query.message.message_thread_id,
+            query.message.message_id,
+            query.from_user,
+            "share_transfer",
+            lang.t("fr_transfer_body", list_name=list_name),
+            list_name,
+            list_name=list_name,
         )
 
     elif data.startswith("share_leave:"):
@@ -199,6 +241,11 @@ async def button_handler(update: Update, context: ContextTypes.DEFAULT_TYPE) -> 
 
     elif data == "new_list":
         await send_force_reply(
-            context, chat_id, query.message.message_thread_id, query.message.message_id,
-            query.from_user, "new_list", lang.t("fr_new_list_body"),
+            context,
+            chat_id,
+            query.message.message_thread_id,
+            query.message.message_id,
+            query.from_user,
+            "new_list",
+            lang.t("fr_new_list_body"),
         )

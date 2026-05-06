@@ -1,5 +1,3 @@
-
-
 from telegram import Update
 from telegram.ext import ContextTypes
 
@@ -45,7 +43,8 @@ async def add_command(update: Update, context: ContextTypes.DEFAULT_TYPE) -> Non
     position = db.add_prompt(owner_chat_id, list_name, text, added_by_id=update.message.from_user.id)
     await update.message.delete()
     await notify(
-        context.bot, chat_id,
+        context.bot,
+        chat_id,
         lang.t("notify_added", user=first_name(user_name), position=position, list_name=list_name, text=text),
         update.message.message_thread_id,
     )
@@ -57,7 +56,10 @@ async def show_panel(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None
     text, markup = views.render_lists_view(chat.id, chat.title or "Lists")
     await update.message.delete()
     await context.bot.send_message(
-        chat.id, text, reply_markup=markup, parse_mode="Markdown",
+        chat.id,
+        text,
+        reply_markup=markup,
+        parse_mode="Markdown",
         message_thread_id=update.message.message_thread_id,
     )
 
@@ -67,10 +69,13 @@ async def help_command(update: Update, context: ContextTypes.DEFAULT_TYPE) -> No
     chat = update.effective_chat
     await update.message.delete()
     await context.bot.send_message(
-        chat.id, lang.t("help_text", chat_id=chat.id), parse_mode="HTML",
+        chat.id,
+        lang.t("help_text", chat_id=chat.id),
+        parse_mode="HTML",
         message_thread_id=update.message.message_thread_id,
     )
-    
+
+
 async def cancel_command(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
     """Cancel a pending ForceReply action for the invoking user."""
     msg = update.message
@@ -96,8 +101,11 @@ async def cancel_command(update: Update, context: ContextTypes.DEFAULT_TYPE) -> 
             text, markup = views.render_lists_view(chat_id, chat_title)
         try:
             await context.bot.edit_message_text(
-                text, chat_id=chat_id, message_id=panel_msg_id,
-                reply_markup=markup, parse_mode="Markdown",
+                text,
+                chat_id=chat_id,
+                message_id=panel_msg_id,
+                reply_markup=markup,
+                parse_mode="Markdown",
             )
         except Exception:
             pass

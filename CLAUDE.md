@@ -12,9 +12,9 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 3. **i18n/** — Localization package (`strings.py` + `locales/en.json`, `locales/de.json`). English + German.
 
-4. **Nachricht extrahieren/extract_telegram.py** — Extracts and deduplicates ListBot messages from Telegram chat exports (used for migration from the legacy bot).
+4. **migration/extract_telegram.py** — Extracts and deduplicates ListBot messages from Telegram chat exports (used for migration from the legacy bot).
 
-5. **Nachricht extrahieren/import_json.py** — Imports extracted prompt data into the ListBot SQLite database.
+5. **migration/import_json.py** — Imports extracted prompt data into the ListBot SQLite database.
 
 ## Project Structure
 
@@ -61,7 +61,7 @@ Listbot/
 ├── token.txt                       # Bot token (gitignored)
 ├── listbot.db                      # SQLite database (gitignored)
 ├── Listbot.code-workspace          # VS Code workspace
-├── Nachricht extrahieren/          # Migration tooling (moving to private branch)
+├── migration/                      # Migration tooling (moving to private branch)
 │   ├── extract_telegram.py
 │   ├── import_json.py
 │   ├── result.json
@@ -73,7 +73,7 @@ Listbot/
 
 ## Repository Plans
 
-The bot (`main.py`, `config.py`, `messaging.py`, `text.py`, `actions.py`, `db/`, `i18n/`, `ui/`, `handlers/`, `Dockerfile`, `docker-compose.yml`, `pyproject.toml`) will be made **public**. The migration tooling (`Nachricht extrahieren/`) will be moved to a **private branch**, as it was only ever used for a single deployment and is not relevant to general users.
+The bot (`main.py`, `config.py`, `messaging.py`, `text.py`, `actions.py`, `db/`, `i18n/`, `ui/`, `handlers/`, `Dockerfile`, `docker-compose.yml`, `pyproject.toml`) will be made **public**. The migration tooling (`migration/`) will be moved to a **private branch**, as it was only ever used for a single deployment and is not relevant to general users.
 
 ## Migration Strategy
 
@@ -172,10 +172,10 @@ Token is read from `BOT_TOKEN` env var or `token.txt`. The database is created a
 venv\Scripts\activate
 
 # Basic usage
-python "Nachricht extrahieren/extract_telegram.py"
+python migration/extract_telegram.py
 
 # With options
-python "Nachricht extrahieren/extract_telegram.py" input.json --bot-name "MyBot" --output-json out.json --quiet
+python migration/extract_telegram.py input.json --bot-name "MyBot" --output-json out.json --quiet
 ```
 
 **Arguments**:

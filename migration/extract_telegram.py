@@ -11,6 +11,7 @@ import re
 from collections import Counter
 from difflib import get_close_matches
 from pathlib import Path
+from typing import Any, cast
 
 # Muster für relevante ListBot-Nachrichten
 LISTBOT_PATTERNS = [
@@ -39,30 +40,25 @@ def get_text(message: dict) -> str:
     """Gibt den reinen Text einer Nachricht zurück (auch bei Entities)."""
     content = message.get("text", "")
     if isinstance(content, list):
-        return "".join(
-            part if isinstance(part, str) else part.get("text", "")
-            for part in content
-        )
-    return content
+        return "".join(part if isinstance(part, str) else part.get("text", "") for part in content)
+    return str(content)
 
 
-def load_json_tolerant(path: Path) -> dict:
+def load_json_tolerant(path: Path) -> dict[str, Any]:
     """Lädt JSON – bei Fehler wird json_repair als Fallback versucht."""
     raw = path.read_text(encoding="utf-8")
     try:
-        return json.loads(raw)
+        return cast(dict[str, Any], json.loads(raw))
     except json.JSONDecodeError as e:
         print(f"Warnung: JSON-Fehler ({e}), versuche automatische Reparatur …")
         try:
             from json_repair import repair_json
-            data = json.loads(repair_json(raw))
+
+            data = cast(dict[str, Any], json.loads(repair_json(raw)))
             print("Reparatur erfolgreich.")
             return data
         except ImportError:
-            print(
-                "Tipp: Installiere json_repair für automatische Reparatur:\n"
-                "  pip install json-repair\n"
-            )
+            print("Tipp: Installiere json_repair für automatische Reparatur:\n  pip install json-repair\n")
             raise
 
 
@@ -182,15 +178,17 @@ def normalize_prompts(result: dict) -> dict:
             continue
         full_name = msg["from"]
         fname = full_name.split()[0]
-        prompts.append({
-            "date": msg["date"],
-            "first_name": fname,
-            "user_id": user_lookup.get(full_name) or user_lookup.get(fname) or "",
-            "prompt": prompt,
-            "list_number": list_number,
-            "draw_count": draw_counts.get(prompt.strip().lower(), 0),
-            "last_drawn": last_drawn.get(prompt.strip().lower()),
-        })
+        prompts.append(
+            {
+                "date": msg["date"],
+                "first_name": fname,
+                "user_id": user_lookup.get(full_name) or user_lookup.get(fname) or "",
+                "prompt": prompt,
+                "list_number": list_number,
+                "draw_count": draw_counts.get(prompt.strip().lower(), 0),
+                "last_drawn": last_drawn.get(prompt.strip().lower()),
+            }
+        )
 
     for msg in result["listbot"]:
         if msg["match_type"] not in {"added", "gruppt", "edited"}:
@@ -199,15 +197,17 @@ def normalize_prompts(result: dict) -> dict:
         if not prompt:
             continue
         fname = first_name or "unknown"
-        prompts.append({
-            "date": msg["date"],
-            "first_name": fname,
-            "user_id": user_lookup.get(fname, ""),
-            "prompt": prompt,
-            "list_number": 1,
-            "draw_count": draw_counts.get(prompt.strip().lower(), 0),
-            "last_drawn": last_drawn.get(prompt.strip().lower()),
-        })
+        prompts.append(
+            {
+                "date": msg["date"],
+                "first_name": fname,
+                "user_id": user_lookup.get(fname, ""),
+                "prompt": prompt,
+                "list_number": 1,
+                "draw_count": draw_counts.get(prompt.strip().lower(), 0),
+                "last_drawn": last_drawn.get(prompt.strip().lower()),
+            }
+        )
 
     prompts.sort(key=lambda x: x["date"])
     return {
@@ -257,17 +257,17 @@ def extract_messages(input_path: Path, bot_name: str = "ListBot") -> dict:
     OVERLAP_TYPES = {"added", "gruppt", "edited"}
     slash_ids = {msg["id"] for msg in slash_msgs if _is_add_edit_cmd(msg["text"])}
     listbot_msgs = [
-        msg for msg in listbot_msgs
+        msg
+        for msg in listbot_msgs
         if msg["match_type"] not in OVERLAP_TYPES
         or not any((msg["id"] - w) in slash_ids for w in range(1, MSG_WINDOW + 1))
     ]
 
     # Deduplizierung: added/gruppt entfernen wenn ein späteres edit dieselbe Position betrifft;
     # bei mehreren edits nur den letzten behalten
-    edited_positions = {
-        _extract_position(msg["text"])
-        for msg in listbot_msgs if msg["match_type"] == "edited"
-    } - {None}
+    edited_positions = {_extract_position(msg["text"]) for msg in listbot_msgs if msg["match_type"] == "edited"} - {
+        None
+    }
     seen_edited: set[int] = set()
     merged: list[dict] = []
     for msg in reversed(listbot_msgs):
@@ -275,7 +275,8 @@ def extract_messages(input_path: Path, bot_name: str = "ListBot") -> dict:
         if msg["match_type"] == "edited":
             if pos in seen_edited:
                 continue
-            seen_edited.add(pos)
+            if pos is not None:
+                seen_edited.add(pos)
         elif msg["match_type"] in {"added", "gruppt"} and pos in edited_positions:
             continue
         merged.append(msg)
@@ -312,9 +313,9 @@ def extract_messages(input_path: Path, bot_name: str = "ListBot") -> dict:
 
 
 def print_section(title: str, messages: list):
-    print(f"\n{'='*60}")
+    print(f"\n{'=' * 60}")
     print(f"  {title}  ({len(messages)} Nachrichten)")
-    print(f"{'='*60}")
+    print(f"{'=' * 60}")
     for msg in messages:
         match_label = f"  [{msg['match_type']}]" if "match_type" in msg else ""
         print(f"\n[{msg['date']}] {msg['from']} (ID {msg['id']}){match_label}")
@@ -322,9 +323,7 @@ def print_section(title: str, messages: list):
 
 
 def main():
-    parser = argparse.ArgumentParser(
-        description="Extrahiert ListBot- und /-Nachrichten aus einem Telegram-Export"
-    )
+    parser = argparse.ArgumentParser(description="Extrahiert ListBot- und /-Nachrichten aus einem Telegram-Export")
     parser.add_argument(
         "input",
         nargs="?",
@@ -342,7 +341,8 @@ def main():
         help="Ergebnis zusätzlich als JSON speichern",
     )
     parser.add_argument(
-        "--quiet", "-q",
+        "--quiet",
+        "-q",
         action="store_true",
         help="Keine Nachrichten auf der Konsole ausgeben",
     )
@@ -358,18 +358,18 @@ def main():
 
     if not args.quiet:
         lookup = result.get("user_lookup", {})
-        print(f"\n{'='*60}")
+        print(f"\n{'=' * 60}")
         print(f"  User ID Lookup ({len(lookup)} users)")
-        print(f"{'='*60}")
+        print(f"{'=' * 60}")
         print(f"  {'Display Name':<25} | User ID")
-        print(f"  {'-'*25}-+-{'-'*15}")
+        print(f"  {'-' * 25}-+-{'-' * 15}")
         for name, uid in sorted(lookup.items()):
             print(f"  {name:<25} | {uid}")
 
-        print(f"\n{'='*60}")
+        print(f"\n{'=' * 60}")
         print(f"  Chat: {result['chat_name']} (ID {result['chat_id']})")
         print(f"  Prompts (normalisiert): {len(normalized['prompts'])}")
-        print(f"{'='*60}")
+        print(f"{'=' * 60}")
         user_counts = Counter(p["first_name"] for p in normalized["prompts"])
         for name, count in user_counts.most_common():
             print(f"  {name:<20}: {count}")

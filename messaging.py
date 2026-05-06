@@ -37,7 +37,8 @@ async def send_force_reply(
     """Send a ForceReply prompt and record the pending action in chat_data."""
     msg_text, entities = force_reply_msg(user, body, bold_text)
     prompt_msg = await context.bot.send_message(
-        chat_id, msg_text + "\n" + lang.t("cancel_hint"),
+        chat_id,
+        msg_text + "\n" + lang.t("cancel_hint"),
         reply_markup=ForceReply(selective=True),
         entities=entities,
         message_thread_id=thread_id,

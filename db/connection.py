@@ -4,6 +4,7 @@ from config import DATA_DIR
 
 DB_PATH = DATA_DIR / "listbot.db"
 
+
 def get_connection() -> sqlite3.Connection:
     """Open a database connection with row factory enabled."""
     conn = sqlite3.connect(DB_PATH)

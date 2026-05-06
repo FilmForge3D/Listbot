@@ -7,6 +7,7 @@ logger = logging.getLogger(__name__)
 
 DATA_DIR = Path(os.environ.get("DATA_DIR", "."))
 
+
 def load_token() -> str:
     """Load bot token from BOT_TOKEN env var or token.txt file."""
     token = os.environ.get("BOT_TOKEN", "").strip()

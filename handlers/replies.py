@@ -1,4 +1,3 @@
-
 from telegram import Update
 from telegram.ext import ContextTypes
 
@@ -31,7 +30,8 @@ async def reply_handler(update: Update, context: ContextTypes.DEFAULT_TYPE) -> N
         position = db.add_prompt(owner_chat_id, list_name, user_text, added_by_id=msg.from_user.id)
         await cleanup_reply_messages(context.bot, chat_id, prompt_msg_id, msg.message_id)
         await notify(
-            context.bot, chat_id,
+            context.bot,
+            chat_id,
             lang.t("notify_added", user=first_name(user_name), position=position, list_name=list_name, text=user_text),
             msg.message_thread_id,
         )
@@ -74,7 +74,8 @@ async def reply_handler(update: Update, context: ContextTypes.DEFAULT_TYPE) -> N
             renamed = db.rename_list(owner_chat_id, list_name, new_name)
             if renamed:
                 await notify(
-                    context.bot, chat_id,
+                    context.bot,
+                    chat_id,
                     lang.t("notify_renamed", old_name=list_name, new_name=new_name),
                     msg.message_thread_id,
                 )
@@ -103,9 +104,11 @@ async def reply_handler(update: Update, context: ContextTypes.DEFAULT_TYPE) -> N
         await cleanup_reply_messages(context.bot, chat_id, prompt_msg_id, msg.message_id)
         if updated:
             await notify(
-                context.bot, chat_id,
-                lang.t("notify_edited", user=first_name(user_name), position=position,
-                       list_name=list_name, text=new_text),
+                context.bot,
+                chat_id,
+                lang.t(
+                    "notify_edited", user=first_name(user_name), position=position, list_name=list_name, text=new_text
+                ),
                 msg.message_thread_id,
             )
         else:

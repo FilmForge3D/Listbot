@@ -45,17 +45,25 @@ def render_list_view(chat_id: int, list_name: str, note: str = "") -> tuple[str,
     else:
         recent_section = ""
     text = f"{header}{recent_section}\n\n{note}" if note else f"{header}{recent_section}"
-    markup = InlineKeyboardMarkup([
-        [InlineKeyboardButton(lang.t("btn_draw"), callback_data=f"draw:{list_name}"),
-         InlineKeyboardButton(lang.t("btn_add"), callback_data=f"add:{list_name}")],
-        [InlineKeyboardButton(lang.t("btn_remove"), callback_data=f"remove:{list_name}"),
-         InlineKeyboardButton(lang.t("btn_edit"), callback_data=f"edit:{list_name}"),
-         InlineKeyboardButton(lang.t("btn_view"), callback_data=f"list:{list_name}:0")],
-        [InlineKeyboardButton(lang.t("btn_stats"), callback_data=f"stats:{list_name}"),
-         InlineKeyboardButton(lang.t("btn_default"), callback_data=f"set_default:{list_name}"),
-         InlineKeyboardButton(lang.t("btn_share"), callback_data=f"share:{list_name}")],
-        [InlineKeyboardButton(lang.t("btn_back"), callback_data="back")],
-    ])
+    markup = InlineKeyboardMarkup(
+        [
+            [
+                InlineKeyboardButton(lang.t("btn_draw"), callback_data=f"draw:{list_name}"),
+                InlineKeyboardButton(lang.t("btn_add"), callback_data=f"add:{list_name}"),
+            ],
+            [
+                InlineKeyboardButton(lang.t("btn_remove"), callback_data=f"remove:{list_name}"),
+                InlineKeyboardButton(lang.t("btn_edit"), callback_data=f"edit:{list_name}"),
+                InlineKeyboardButton(lang.t("btn_view"), callback_data=f"list:{list_name}:0"),
+            ],
+            [
+                InlineKeyboardButton(lang.t("btn_stats"), callback_data=f"stats:{list_name}"),
+                InlineKeyboardButton(lang.t("btn_default"), callback_data=f"set_default:{list_name}"),
+                InlineKeyboardButton(lang.t("btn_share"), callback_data=f"share:{list_name}"),
+            ],
+            [InlineKeyboardButton(lang.t("btn_back"), callback_data="back")],
+        ]
+    )
     return text, markup
 
 
@@ -69,9 +77,11 @@ def render_share_panel(chat_id: int, list_name: str, owner_chat_id: int) -> tupl
     list_id = row["id"] if row else None
     guests = db.get_list_shares(list_id) if list_id else []
     is_owner = chat_id == owner_chat_id
+
     def _fmt_guest(g: int) -> str:
         n = db.lookup_name(g)
         return f"  • {n} (`{g}`)" if n else f"  • `{g}`"
+
     guest_lines = "\n".join(_fmt_guest(g) for g in guests) if guests else lang.t("share_no_guests")
     role = lang.t("share_role_owner") if is_owner else lang.t("share_role_guest")
     owner_label = db.lookup_name(owner_chat_id)
@@ -86,16 +96,22 @@ def render_share_panel(chat_id: int, list_name: str, owner_chat_id: int) -> tupl
     )
     buttons: list[list[InlineKeyboardButton]] = []
     if is_owner:
-        buttons.append([
-            InlineKeyboardButton(lang.t("btn_invite"), callback_data=f"share_invite:{list_name}"),
-            InlineKeyboardButton(lang.t("btn_remove_guest"), callback_data=f"share_remove:{list_name}"),
-        ])
-        buttons.append([
-            InlineKeyboardButton(lang.t("btn_transfer"), callback_data=f"share_transfer:{list_name}"),
-        ])
+        buttons.append(
+            [
+                InlineKeyboardButton(lang.t("btn_invite"), callback_data=f"share_invite:{list_name}"),
+                InlineKeyboardButton(lang.t("btn_remove_guest"), callback_data=f"share_remove:{list_name}"),
+            ]
+        )
+        buttons.append(
+            [
+                InlineKeyboardButton(lang.t("btn_transfer"), callback_data=f"share_transfer:{list_name}"),
+            ]
+        )
     else:
-        buttons.append([
-            InlineKeyboardButton(lang.t("btn_leave"), callback_data=f"share_leave:{list_name}"),
-        ])
+        buttons.append(
+            [
+                InlineKeyboardButton(lang.t("btn_leave"), callback_data=f"share_leave:{list_name}"),
+            ]
+        )
     buttons.append([InlineKeyboardButton(lang.t("btn_back"), callback_data=f"open:{list_name}")])
     return text, InlineKeyboardMarkup(buttons)

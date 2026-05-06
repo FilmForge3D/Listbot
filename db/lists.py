@@ -55,9 +55,7 @@ def delete_list(chat_id: int, list_name: str) -> bool:
         ).fetchone()
         if not row:
             return False
-        count = conn.execute(
-            "SELECT COUNT(*) FROM prompts WHERE list_id = ?", (row["id"],)
-        ).fetchone()[0]
+        count = conn.execute("SELECT COUNT(*) FROM prompts WHERE list_id = ?", (row["id"],)).fetchone()[0]
         if count > 0:
             return False
         conn.execute("DELETE FROM lists WHERE id = ?", (row["id"],))

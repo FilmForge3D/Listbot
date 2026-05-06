@@ -98,9 +98,7 @@ def get_stats(chat_id: int, list_name: str) -> dict | None:
         if not row:
             return None
         list_id = row["id"]
-        total = conn.execute(
-            "SELECT COUNT(*) FROM prompts WHERE list_id = ?", (list_id,)
-        ).fetchone()[0]
+        total = conn.execute("SELECT COUNT(*) FROM prompts WHERE list_id = ?", (list_id,)).fetchone()[0]
         total_draws = conn.execute(
             "SELECT COALESCE(SUM(drawn), 0) FROM prompts WHERE list_id = ?", (list_id,)
         ).fetchone()[0]
