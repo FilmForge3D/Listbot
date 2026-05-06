@@ -11,23 +11,15 @@ def render_lists_view(chat_id: int, title: str) -> tuple[str, InlineKeyboardMark
     default = db.get_default_list(chat_id)
     has_any = bool(owned or shared)
     text = f"*{title}*\n\n{lang.t('panel_your_lists')}" if has_any else f"*{title}*\n\n{lang.t('panel_no_lists')}"
-    buttons: list[list[InlineKeyboardButton]] = []
-    row: list[InlineKeyboardButton] = []
+    items: list[tuple[str, str]] = []
     for name in owned:
         label = f"⭐ {name}" if name == default else name
-        row.append(InlineKeyboardButton(label, callback_data=f"open:{name}"))
-        if len(row) == 2:
-            buttons.append(row)
-            row = []
+        items.append((label, f"open:{name}"))
     for s in shared:
         name = s["list_name"]
         label = f"⭐ 🔗 {name}" if name == default else f"🔗 {name}"
-        row.append(InlineKeyboardButton(label, callback_data=f"open:{name}"))
-        if len(row) == 2:
-            buttons.append(row)
-            row = []
-    if row:
-        buttons.append(row)
+        items.append((label, f"open:{name}"))
+    buttons = _chunk_buttons(items)
     buttons.append([InlineKeyboardButton(lang.t("btn_new_list"), callback_data="new_list")])
     return text, InlineKeyboardMarkup(buttons)
 
@@ -44,7 +36,7 @@ def render_list_view(chat_id: int, list_name: str, note: str = "") -> tuple[str,
         recent_section = f"\n\n*{lang.t('panel_recent_header')}*\n{lines}"
     else:
         recent_section = ""
-    text = f"{header}{recent_section}\n\n{note}" if note else f"{header}{recent_section}"
+    text = f"{header}{recent_section}" + (f"\n\n{note}" if note else "")
     markup = InlineKeyboardMarkup(
         [
             [
@@ -67,8 +59,18 @@ def render_list_view(chat_id: int, list_name: str, note: str = "") -> tuple[str,
     return text, markup
 
 
+def _chunk_buttons(items: list[tuple[str, str]], per_row: int = 2) -> list[list[InlineKeyboardButton]]:
+    """Group (label, callback_data) pairs into rows of per_row buttons."""
+    rows: list[list[InlineKeyboardButton]] = []
+    for i in range(0, len(items), per_row):
+        chunk = items[i : i + per_row]
+        rows.append([InlineKeyboardButton(label, callback_data=data) for label, data in chunk])
+    return rows
+
+
 def render_share_panel(chat_id: int, list_name: str, owner_chat_id: int) -> tuple[str, InlineKeyboardMarkup]:
     """Build the sharing management panel for a list."""
+    # No public db.get_list_id() exists; resolve directly until one is added.
     with db.get_connection() as conn:
         row = conn.execute(
             "SELECT id FROM lists WHERE chat_id = ? AND list_name = ?",

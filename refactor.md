@@ -141,13 +141,13 @@ Heavy boilerplate repetition: `with get_connection() as conn: row = conn.execute
 
 | File | Function | Verdict | Notes |
 |---|---|---|---|
-| [ui/views.py:7](ui/views.py#L7) | `render_lists_view` | | |
-| [ui/views.py:35](ui/views.py#L35) | `render_list_view` | | |
-| [ui/views.py:70](ui/views.py#L70) | `render_share_panel` | | check for keyboard-builder helpers |
+| [ui/views.py:7](ui/views.py#L7) | `render_lists_view` | cleanup | Extracted `_chunk_buttons` helper; replaced duplicated chunking loops with item-list + helper |
+| [ui/views.py:27](ui/views.py#L27) | `render_list_view` | cleanup | Simplified text composition: `header + (f"\n\n{note}" if note else "")` |
+| [ui/views.py:71](ui/views.py#L71) | `render_share_panel` | cleanup | Added comment flagging raw SQL as leakage pending `db.get_list_id()` |
 
-- [ ] ui.views.render_lists_view
-- [ ] ui.views.render_list_view
-- [ ] ui.views.render_share_panel
+- [x] ui.views.render_lists_view
+- [x] ui.views.render_list_view
+- [x] ui.views.render_share_panel
 
 ---
 
