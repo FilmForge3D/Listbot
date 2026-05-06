@@ -51,15 +51,15 @@ Before making changes to the code, audit the current code base against `CLAUDE.m
 
 | File | Function | Verdict | Notes |
 |---|---|---|---|
-| [config.py:11](config.py#L11) | `load_token` | | |
-| [text.py:4](text.py#L4) | `first_name` | | |
-| [i18n/strings.py:9](i18n/strings.py#L9) | `load_locale` | | |
-| [i18n/strings.py:19](i18n/strings.py#L19) | `t` | | |
+| [config.py:11](config.py#L11) | `load_token` | keep | Clean; no changes needed |
+| [text.py:4](text.py#L4) | `first_name` | keep | Clean; no changes needed |
+| [i18n/strings.py:10](i18n/strings.py#L10) | `load_locale` | cleanup | Added docstring, replaced print/sys with logger.warning, dropped sys import |
+| [i18n/strings.py:21](i18n/strings.py#L21) | `t` | cleanup | Added docstring |
 
-- [ ] config.load_token
-- [ ] text.first_name
-- [ ] i18n.strings.load_locale
-- [ ] i18n.strings.t
+- [x] config.load_token
+- [x] text.first_name
+- [x] i18n.strings.load_locale
+- [x] i18n.strings.t
 
 ---
 
