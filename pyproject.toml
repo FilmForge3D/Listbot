@@ -6,6 +6,9 @@ dependencies = [
     "python-telegram-bot~=22.7",
 ]
 
+[tool.pytest.ini_options]
+pythonpath = ["."]
+
 [tool.ruff]
 line-length = 120
 target-version = "py310"
