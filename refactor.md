@@ -165,17 +165,17 @@ Heavy boilerplate repetition: `with get_connection() as conn: row = conn.execute
 
 | File | Function | Verdict | Notes |
 |---|---|---|---|
-| [handlers/commands.py:12](handlers/commands.py#L12) | `draw_command` | | |
-| [handlers/commands.py:29](handlers/commands.py#L29) | `add_command` | | |
-| [handlers/commands.py:53](handlers/commands.py#L53) | `show_panel` | | |
-| [handlers/commands.py:67](handlers/commands.py#L67) | `help_command` | | |
-| [handlers/commands.py:79](handlers/commands.py#L79) | `cancel_command` | | |
+| [handlers/commands.py:17](handlers/commands.py#L17) | `draw_command` | keep | Clean; no changes needed |
+| [handlers/commands.py:34](handlers/commands.py#L34) | `add_command` | cleanup | Bound `user = from_user`; guarded `.id` accesses behind `if user` check |
+| [handlers/commands.py:60](handlers/commands.py#L60) | `show_panel` | keep | Clean; no changes needed |
+| [handlers/commands.py:74](handlers/commands.py#L74) | `help_command` | keep | Clean; no changes needed |
+| [handlers/commands.py:86](handlers/commands.py#L86) | `cancel_command` | cleanup | Replaced `except Exception: pass` with `except TelegramError` + `logger.warning`; added module logger |
 
-- [ ] handlers.commands.draw_command
-- [ ] handlers.commands.add_command
-- [ ] handlers.commands.show_panel
-- [ ] handlers.commands.help_command
-- [ ] handlers.commands.cancel_command
+- [x] handlers.commands.draw_command
+- [x] handlers.commands.add_command
+- [x] handlers.commands.show_panel
+- [x] handlers.commands.help_command
+- [x] handlers.commands.cancel_command
 
 ### 5b — `reply_handler` ⚠️ DECOMPOSE
 

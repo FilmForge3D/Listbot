@@ -1,4 +1,7 @@
+import logging
+
 from telegram import Update
+from telegram.error import TelegramError
 from telegram.ext import ContextTypes
 
 import db
@@ -7,6 +10,8 @@ from actions import do_draw
 from messaging import notify
 from text import first_name
 from ui import views
+
+logger = logging.getLogger(__name__)
 
 
 async def draw_command(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
@@ -38,9 +43,11 @@ async def add_command(update: Update, context: ContextTypes.DEFAULT_TYPE) -> Non
         await update.message.reply_text(lang.t("err_add_usage"), parse_mode="Markdown")
         return
     owner_chat_id = db.resolve_list_owner(chat_id, list_name) or chat_id
-    user_name = update.message.from_user.full_name if update.message.from_user else ""
-    db.upsert_user(update.message.from_user.id, user_name)
-    position = db.add_prompt(owner_chat_id, list_name, text, added_by_id=update.message.from_user.id)
+    user = update.message.from_user
+    user_name = user.full_name if user else ""
+    if user:
+        db.upsert_user(user.id, user_name)
+    position = db.add_prompt(owner_chat_id, list_name, text, added_by_id=user.id if user else None)
     await update.message.delete()
     await notify(
         context.bot,
@@ -88,8 +95,8 @@ async def cancel_command(update: Update, context: ContextTypes.DEFAULT_TYPE) -> 
     chat_id = msg.chat_id
     try:
         await context.bot.delete_message(chat_id, state["prompt_msg_id"])
-    except Exception:
-        pass
+    except TelegramError as e:
+        logger.warning("Failed to delete prompt message: %s", e)
     list_name = state.get("list_name")
     panel_msg_id = state.get("panel_msg_id")
     if panel_msg_id:
@@ -107,5 +114,5 @@ async def cancel_command(update: Update, context: ContextTypes.DEFAULT_TYPE) -> 
                 reply_markup=markup,
                 parse_mode="Markdown",
             )
-        except Exception:
-            pass
+        except TelegramError as e:
+            logger.warning("Failed to restore panel after cancel: %s", e)
