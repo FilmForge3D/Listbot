@@ -22,9 +22,9 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 Listbot/
 ├── main.py                         # Entry point (python-telegram-bot 22.x)
 ├── config.py                       # load_token(), DATA_DIR
-├── messaging.py                    # _notify, _force_reply_msg, _send_force_reply, _cleanup_reply_messages
-├── text.py                         # _first_name
-├── actions.py                      # _do_draw
+├── messaging.py                    # notify, force_reply_msg, send_force_reply, cleanup_reply_messages
+├── text.py                         # first_name
+├── actions.py                      # do_draw
 │
 ├── i18n/
 │   ├── __init__.py                 # exports load_locale, t
@@ -189,9 +189,9 @@ python migration/extract_telegram.py input.json --bot-name "MyBot" --output-json
 - **Commit on command**: When the user says "commit", create a git commit immediately — no confirmation needed. The user has already reviewed and verified the feature before issuing the command.
 - **Keep changes synced**: Stage and commit only the files relevant to the feature being committed.
 
-## Development Safeguards
+## AI Collaboration Rules
 
-⚠️ **Critical constraints for all future work:**
+⚠️ **These rules govern Claude's behavior, not general coding conventions:**
 
 ### Bot Behavior Rules
 - **Single notification per action**: Any message sent by the bot must result in at most one notification to other chat users. Do not send multiple messages where one would suffice; consolidate all output into a single reply.
@@ -201,8 +201,6 @@ python migration/extract_telegram.py input.json --bot-name "MyBot" --output-json
 - **Large changes**: Any change exceeding ~30 net new lines requires explicit user approval before writing. Large changes are not unwanted — they just need the user to confirm the plan first, so the implementation stays focused and reviewable.
 
 ### New Functions
-- **Size limit**: Maximum 100 lines per new function
-- **Testability**: All new functions must be independently testable
 - **One at a time**: Implement only one new function per session/commit
 - **Module split**: When a concern is large enough to stand alone (e.g., database, config, utilities), split it into its own module rather than growing a single file. Ask before doing so.
 
@@ -232,24 +230,59 @@ All files use UTF-8 (necessary for German locale strings and code comments).
 
 All bot modules use Python 3.10+ style: type hints, f-strings, `async/await`, union types (`X | Y` not `Optional[X]`).
 
+**Type hints**
+- Annotate every function signature, including `-> None` on void functions.
+- Use `X | None`, never `Optional[X]`.
+- Use `TypedDict` over `dict[str, Any]` when the shape of a dict is known and stable.
+- Do not introduce `TypeAlias` or `Protocol` unless a type is reused in three or more places.
+
 **Imports**
-- Standard library → third-party → local; one blank line between groups.
+- Standard library → third-party → local; one blank line between groups. Within-group order is managed by ruff (`I` ruleset) — do not sort manually.
 - Use module-level imports for `db` and `i18n`: `import db` / `import i18n as lang`. Call as `db.foo()` / `lang.t()`.
 - Use direct function imports for other local modules: `from messaging import notify`, `from text import first_name`.
 - Inside `db/` submodules, import from siblings directly: `from db.connection import get_connection`.
 
 **Naming**
+- Modules, functions, variables: `snake_case`; use full words — no abbreviations except universally understood ones (`id`, `url`, `db`)
+- Classes: `CamelCase`
+- Module-level constants: `SCREAMING_SNAKE_CASE` (e.g., `MSG_WINDOW`, `DB_PATH`)
+- Booleans: `is_`, `has_`, or `can_` prefix (e.g., `is_shared`, `has_default`)
+- Throwaway variables: single `_` (e.g., `for _ in range(n)`)
 - Drop leading underscores when a helper moves to its own module — it is now a public API (`notify`, not `_notify`; `render_lists_view`, not `_render_lists_view`).
 - Keep leading underscores only for genuinely private helpers that are not meant to be imported by other modules.
 
 **Package `__init__.py`**
 - Re-export the public API explicitly with `__all__`. Consumers always import from the package root (`from db import init_db`), never from submodules directly.
+- Define `__all__` as a list of strings, one name per line, alphabetically sorted.
+
+**Function ordering**
+- Public functions first (matching `__all__` order), private helpers after.
+- Within each group, prefer dependency order: callees before callers where natural.
+
+**Function length**
+- Target 30 lines per function; hard ceiling at 100 lines.
+- Every function must be independently testable — no hidden state dependencies.
 
 **Docstrings**
-- Single-line docstring on every public function. No multi-line docstring blocks.
+- Every private helper (leading underscore, not in `__all__`): one-line docstring.
+- Every public function (in `__all__`): one-line minimum; multi-line permitted when the contract, edge cases, or parameters benefit from clarification. Keep it concise.
+- Docstrings state WHAT the function does (its contract), not HOW.
 
 **Comments**
-- No inline comments explaining what the code does. A comment is only warranted when the *why* is non-obvious (hidden constraint, workaround, subtle invariant).
+- Comments guide a reader through function logic — a brief `# resolve owner before checking shares` is encouraged.
+- Never explain what the code does at the expression level (`x += 1  # increment x`).
+- Always add a comment when the WHY is non-obvious: a hidden constraint, a workaround, a subtle invariant.
+
+**Error handling**
+- DB functions: raise on programmer error (bad `list_id`, constraint violation); return `None` on expected absence (no row found).
+- Handlers: catch `telegram.error.TelegramError` and log; never silently swallow exceptions.
+- No bare `except`. Catch the narrowest exception type that makes sense.
+- No custom exception classes unless the same error type is caught in two or more places.
+
+**Async**
+- Never call blocking I/O (file reads, DB) from the event loop without `run_in_executor`. SQLite access in this project is a known pragmatic exception — keep it contained to `db/`.
+- Prefer sequential `await` over `asyncio.gather` unless concurrency is the explicit goal.
+- Do not suppress `asyncio.CancelledError`.
 
 ## Python Version
 
