@@ -1,5 +1,5 @@
 from db.connection import get_connection
-from db.lists import delete_list, get_list_names, rename_list
+from db.lists import delete_list, get_list_id, get_list_names, rename_list
 from db.prompts import (
     add_prompt,
     draw_random_prompt,
@@ -24,6 +24,7 @@ from db.users import lookup_name, upsert_user
 __all__ = [
     "get_connection",
     "init_db",
+    "get_list_id",
     "get_list_names",
     "rename_list",
     "delete_list",

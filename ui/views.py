@@ -70,13 +70,7 @@ def _chunk_buttons(items: list[tuple[str, str]], per_row: int = 2) -> list[list[
 
 def render_share_panel(chat_id: int, list_name: str, owner_chat_id: int) -> tuple[str, InlineKeyboardMarkup]:
     """Build the sharing management panel for a list."""
-    # No public db.get_list_id() exists; resolve directly until one is added.
-    with db.get_connection() as conn:
-        row = conn.execute(
-            "SELECT id FROM lists WHERE chat_id = ? AND list_name = ?",
-            (owner_chat_id, list_name),
-        ).fetchone()
-    list_id = row["id"] if row else None
+    list_id = db.get_list_id(owner_chat_id, list_name)
     guests = db.get_list_shares(list_id) if list_id else []
     is_owner = chat_id == owner_chat_id
 

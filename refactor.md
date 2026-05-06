@@ -117,6 +117,14 @@ Heavy boilerplate repetition: `with get_connection() as conn: row = conn.execute
 - [x] db.prompts.edit_prompt
 - [x] db.prompts.remove_prompt
 
+## Phase 2.5 — db.get_list_id
+
+| File | Function | Verdict | Notes |
+|---|---|---|---|
+| [db/lists.py:22](db/lists.py#L22) | `get_list_id` | new | Added public lookup-only variant; removes raw SQL from `render_share_panel` |
+
+- [x] db.lists.get_list_id
+
 ---
 
 ## Phase 3 — Messaging & actions
