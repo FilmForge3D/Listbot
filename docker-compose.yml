@@ -4,5 +4,6 @@ services:
     restart: unless-stopped
     environment:
       - BOT_TOKEN=your_token_here
+      # - BOT_LANG=de
     volumes:
       - ./data:/app/data

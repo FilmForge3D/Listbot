@@ -226,3 +226,4 @@ token.txt
 *.code-workspace
 .claude/
 migration/
+refactor.md
