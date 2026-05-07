@@ -179,13 +179,26 @@ Heavy boilerplate repetition: `with get_connection() as conn: row = conn.execute
 
 ### 5b — `reply_handler` ⚠️ DECOMPOSE
 
-[handlers/replies.py:11](handlers/replies.py#L11) — ~186 LOC, well over the 100-LOC ceiling.
+| File | Function | Verdict | Notes |
+|---|---|---|---|
+| [handlers/replies.py:267](handlers/replies.py#L267) | `reply_handler` | decompose | Thin dispatcher via `_HANDLERS` dict; all logic extracted to per-action helpers |
+| [handlers/replies.py:11](handlers/replies.py#L11) | `_handle_add` | new | Resolves owner, upserts user, adds prompt, notifies |
+| [handlers/replies.py:36](handlers/replies.py#L36) | `_handle_remove` | new | Validates digit, removes prompt, notifies |
+| [handlers/replies.py:66](handlers/replies.py#L66) | `_handle_new_list` | new | Renders new list view |
+| [handlers/replies.py:84](handlers/replies.py#L84) | `_handle_rename` | new | Minimal signature (no dispatch contract); called by `_handle_edit` |
+| [handlers/replies.py:118](handlers/replies.py#L118) | `_handle_edit` | new | Dispatches to `_handle_rename` or edits prompt at position |
+| [handlers/replies.py:156](handlers/replies.py#L156) | `_resolve_share_id` | new | Shared cleanup + digit validation for all three share actions |
+| [handlers/replies.py:177](handlers/replies.py#L177) | `_handle_share_invite` | new | Adds share recipient; replaced raw SQL with `db.get_list_id` |
+| [handlers/replies.py:203](handlers/replies.py#L203) | `_handle_share_remove` | new | Removes share recipient; replaced raw SQL with `db.get_list_id` |
+| [handlers/replies.py:229](handlers/replies.py#L229) | `_handle_share_transfer` | new | Transfers ownership; replaced raw SQL with `db.get_list_id` |
 
-- [ ] **Plan first** — read top-to-bottom, identify pending-action branches (new item / edit text / list rename / share target / etc.)
-- [ ] **Propose** dispatch shape: lookup table of `pending_action → handler_fn`, or per-branch `_handle_<action>` helpers
-- [ ] **Get approval** before writing
-- [ ] Extract helpers one at a time, each its own commit
-- [ ] Final pass: trim `reply_handler` to a thin dispatcher
+- [x] **Plan first** — read top-to-bottom, identify pending-action branches (new item / edit text / list rename / share target / etc.)
+- [x] **Propose** dispatch shape: lookup table of `pending_action → handler_fn`, or per-branch `_handle_<action>` helpers
+- [x] **Get approval** before writing
+- [x] Extract helpers one at a time, each its own action
+- [x] Final pass: trim `reply_handler` to a thin dispatcher
+
+- [x] handlers.replies.reply_handler
 
 ### 5c — `button_handler` ⚠️ DECOMPOSE
 
@@ -194,7 +207,7 @@ Heavy boilerplate repetition: `with get_connection() as conn: row = conn.execute
 - [ ] **Plan first** — enumerate every callback-data prefix the function dispatches on
 - [ ] **Propose** structure: route table mapping prefix → coroutine, or `_handle_<action>` helpers grouped by domain (list ops / prompt ops / share ops)
 - [ ] **Get approval** before writing
-- [ ] Extract helpers one at a time, each its own commit
+- [ ] Extract helpers one at a time, each its own action
 - [ ] Final pass: `button_handler` becomes routing only
 
 ### 5d — Registration
