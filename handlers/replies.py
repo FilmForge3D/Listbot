@@ -20,7 +20,7 @@ async def _handle_add(
     prompt_msg_id: int,
 ) -> None:
     """Add a new prompt to the list."""
-    list_name = state["list_name"]
+    list_name = str(state["list_name"])
     owner_chat_id = db.resolve_list_owner(chat_id, list_name) or chat_id
     user_name = msg.from_user.full_name if msg.from_user else ""
     db.upsert_user(msg.from_user.id, user_name)
@@ -45,7 +45,7 @@ async def _handle_remove(
     prompt_msg_id: int,
 ) -> None:
     """Remove a prompt at the given position."""
-    list_name = state["list_name"]
+    list_name = str(state["list_name"])
     owner_chat_id = db.resolve_list_owner(chat_id, list_name) or chat_id
     await cleanup_reply_messages(bot, chat_id, prompt_msg_id, msg.message_id)
     if not user_text.isdigit():
@@ -127,7 +127,7 @@ async def _handle_edit(
     prompt_msg_id: int,
 ) -> None:
     """Edit a prompt at the given position, or rename the list."""
-    list_name = state["list_name"]
+    list_name = str(state["list_name"])
     owner_chat_id = db.resolve_list_owner(chat_id, list_name) or chat_id
     parts = user_text.split(None, 1)
     await cleanup_reply_messages(bot, chat_id, prompt_msg_id, msg.message_id)
@@ -190,9 +190,11 @@ async def _handle_share_op(
     panel_owner_fn: Callable[[bool, int, int], int],
 ) -> None:
     """Common scaffold: resolve owner → validate target ID → run db_fn → render share panel."""
-    list_name = state["list_name"]
+    list_name = str(state["list_name"])
     owner_chat_id = db.resolve_list_owner(chat_id, list_name) or chat_id
-    target_id = await _resolve_share_id(bot, msg, chat_id, list_name, owner_chat_id, user_text, panel_msg_id, prompt_msg_id)
+    target_id = await _resolve_share_id(
+        bot, msg, chat_id, list_name, owner_chat_id, user_text, panel_msg_id, prompt_msg_id
+    )
     if target_id is None:
         return
     list_id = db.get_list_id(owner_chat_id, list_name)
@@ -277,6 +279,8 @@ _HANDLERS = {
 async def reply_handler(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
     """Dispatch ForceReply responses to the appropriate action handler."""
     msg = update.message
+    if msg is None:
+        return
     if not msg.from_user:
         return
     state = context.chat_data.pop(f"user:{msg.from_user.id}", None)

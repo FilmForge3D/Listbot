@@ -297,17 +297,33 @@ Six `send_force_reply` calls in `callbacks.py` repeat the same five boilerplate 
 
 ## Phase 8 — Final sweep
 
-- [ ] Run ruff / mypy across the project
-- [ ] Run the test suite
+- [x] Run ruff / mypy across the project — fixed 12 E501 + 45 mypy errors (guards + str casts)
+- [x] Run the test suite — 6/6 passed
 - [ ] Smoke-test the bot end-to-end (start, /list, draw, add, edit, remove, share)
-- [ ] Update CLAUDE.md if any new conventions emerged during the pass
-- [ ] Delete this `refactor.md` (or archive it) once Phase 8 is green
+- [x] Update CLAUDE.md if any new conventions emerged during the pass — added Telegram optional guards + `_name` lambda convention
+
+---
+
+## Phase 9 - Preparation for release
+
+- [ ] Update README.md for a public release 
+- [ ] How to make the migration module private?
+- [ ] Release Version naming
+- [ ] Docker and Docker Compose check
+- [ ] Unraid XML
+- [ ] prepare public github release. RC first
+
+---
+
+## Phase 10 - Finishing things
+
+- [ ] Delete this `refactor.md` (or archive it) once Phase 9 is green
 
 ---
 
 ## Counters
 
 - **Total functions in scope:** 44
-- **Phases:** 8
+- **Phases:** 10
 - **Big-ticket items:** `reply_handler`, `button_handler`, possibly `get_stats`
 - **Cross-cutting candidates** (propose before doing): shared `_resolve_list_id` helper for the db layer
