@@ -202,21 +202,44 @@ Heavy boilerplate repetition: `with get_connection() as conn: row = conn.execute
 
 ### 5c — `button_handler` ⚠️ DECOMPOSE
 
-[handlers/callbacks.py:13](handlers/callbacks.py#L13) — ~238 LOC, the worst offender.
+| File | Function | Verdict | Notes |
+|---|---|---|---|
+| [handlers/callbacks.py:265](handlers/callbacks.py#L265) | `button_handler` | decompose | Thin dispatcher; all logic extracted to per-action helpers; uses elif chain (prefix routing rules out dict) |
+| [handlers/callbacks.py:15](handlers/callbacks.py#L15) | `_handle_back` | new | Navigate back to lists overview |
+| [handlers/callbacks.py:21](handlers/callbacks.py#L21) | `_handle_open` | new | Open panel for a specific list |
+| [handlers/callbacks.py:29](handlers/callbacks.py#L29) | `_handle_draw` | new | Draw random prompt; delete panel on success |
+| [handlers/callbacks.py:43](handlers/callbacks.py#L43) | `_handle_list_page` | new | Paginated prompt list; `PAGE_SIZE = 50` promoted to module constant |
+| [handlers/callbacks.py:72](handlers/callbacks.py#L72) | `_handle_stats` | new | Draw statistics view |
+| [handlers/callbacks.py:100](handlers/callbacks.py#L100) | `_handle_remove_prompt` | new | Prompt-or-delete-list flow when list is empty |
+| [handlers/callbacks.py:132](handlers/callbacks.py#L132) | `_handle_edit_prompt` | new | ForceReply to edit a prompt |
+| [handlers/callbacks.py:148](handlers/callbacks.py#L148) | `_handle_add_prompt` | new | ForceReply to add a prompt |
+| [handlers/callbacks.py:164](handlers/callbacks.py#L164) | `_handle_set_default` | new | Set default list for this chat |
+| [handlers/callbacks.py:173](handlers/callbacks.py#L173) | `_handle_delete_list_confirm` | new | Delete list after confirmation; fixed `data[20:]` off-by-3 → `data[23:]` |
+| [handlers/callbacks.py:184](handlers/callbacks.py#L184) | `_handle_share_panel` | new | Open share management panel |
+| [handlers/callbacks.py:192](handlers/callbacks.py#L192) | `_handle_share_invite` | new | ForceReply to invite a chat |
+| [handlers/callbacks.py:208](handlers/callbacks.py#L208) | `_handle_share_remove` | new | ForceReply to remove a chat |
+| [handlers/callbacks.py:224](handlers/callbacks.py#L224) | `_handle_share_transfer` | new | ForceReply to transfer ownership |
+| [handlers/callbacks.py:240](handlers/callbacks.py#L240) | `_handle_share_leave` | new | Leave shared list; replaced raw SQL with `db.get_list_id` |
+| [handlers/callbacks.py:252](handlers/callbacks.py#L252) | `_handle_new_list` | new | ForceReply to create a new list |
 
-- [ ] **Plan first** — enumerate every callback-data prefix the function dispatches on
-- [ ] **Propose** structure: route table mapping prefix → coroutine, or `_handle_<action>` helpers grouped by domain (list ops / prompt ops / share ops)
-- [ ] **Get approval** before writing
-- [ ] Extract helpers one at a time, each its own action
-- [ ] Final pass: `button_handler` becomes routing only
+Also fixed `lang.t("btn_db.delete_list")` key typo → `lang.t("btn_delete_list")` in `_handle_remove_prompt`.
+
+- [x] **Plan first** — enumerate every callback-data prefix the function dispatches on
+- [x] **Propose** structure: route table mapping prefix → coroutine, or `_handle_<action>` helpers grouped by domain (list ops / prompt ops / share ops)
+- [x] **Get approval** before writing
+- [x] Extract helpers one at a time, each its own action
+- [x] Final pass: `button_handler` becomes routing only
+
+- [x] handlers.callbacks.button_handler
 
 ### 5d — Registration
 
 | File | Function | Verdict | Notes |
 |---|---|---|---|
-| [handlers/__init__.py:20](handlers/__init__.py#L20) | `register_handlers` | | |
+| [handlers/__init__.py:21](handlers/__init__.py#L21) | `register_handlers` | keep | Added `__all__ = ["register_handlers"]`; function itself was already clean |
+| [ui/__init__.py:3](ui/__init__.py#L3) | _(module)_ | cleanup | Was empty; added re-exports of `render_lists_view`, `render_list_view`, `render_share_panel` + `__all__` |
 
-- [ ] handlers.__init__.register_handlers
+- [x] handlers.__init__.register_handlers
 
 ---
 

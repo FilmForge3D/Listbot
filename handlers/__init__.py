@@ -1,3 +1,5 @@
+__all__ = ["register_handlers"]
+
 from telegram.ext import (
     Application,
     CallbackQueryHandler,
