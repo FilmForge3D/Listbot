@@ -35,6 +35,7 @@ Listbot is a Telegram bot for managing writing prompt lists in group chats.
 - **Module split**: Ask before splitting a concern into a new module.
 - **Edit limit**: Max 50 lines per Edit call; one function per call.
 - **Refactoring**: Follow `refactor.md`. Ask to create one if it doesn't exist; a single function may be refactored without a plan.
+    - **Keep track**: Check things of in the plan file as you go. Don't work on checked items, create a new item if need be.
 
 ## Code Style
 
