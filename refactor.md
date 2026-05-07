@@ -262,9 +262,9 @@ Six `send_force_reply` calls in `callbacks.py` repeat the same five boilerplate 
 
 | File | Function | Verdict | Notes |
 |---|---|---|---|
-| [handlers/replies.py](handlers/replies.py) | `_handle_share_op` | new | Common scaffold for all three share operations; transfer diverges on panel render (new owner vs. old owner) — handle as a special-case arg |
+| [handlers/replies.py](handlers/replies.py) | `_handle_share_op` | new | Common scaffold for all three share operations; transfer diverges on panel render (new owner vs. old owner) — handled via `panel_owner_fn` arg |
 
-- [ ] handlers.replies._handle_share_op
+- [x] handlers.replies._handle_share_op
 
 ---
 

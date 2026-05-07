@@ -1,3 +1,5 @@
+from collections.abc import Callable
+
 from telegram import Bot, Message, Update
 from telegram.ext import ContextTypes
 
@@ -174,6 +176,35 @@ async def _resolve_share_id(
     return int(user_text)
 
 
+async def _handle_share_op(
+    bot: Bot,
+    msg: Message,
+    state: dict[str, str | int],
+    chat_id: int,
+    user_text: str,
+    panel_msg_id: int,
+    prompt_msg_id: int,
+    db_fn: Callable[[int, int], bool],
+    ok_note_fn: Callable[[int, str], str],
+    err_note_fn: Callable[[int], str],
+    panel_owner_fn: Callable[[bool, int, int], int],
+) -> None:
+    """Common scaffold: resolve owner → validate target ID → run db_fn → render share panel."""
+    list_name = state["list_name"]
+    owner_chat_id = db.resolve_list_owner(chat_id, list_name) or chat_id
+    target_id = await _resolve_share_id(bot, msg, chat_id, list_name, owner_chat_id, user_text, panel_msg_id, prompt_msg_id)
+    if target_id is None:
+        return
+    list_id = db.get_list_id(owner_chat_id, list_name)
+    success = bool(list_id and db_fn(list_id, target_id))
+    note = ok_note_fn(target_id, list_name) if success else err_note_fn(target_id)
+    panel_owner_id = panel_owner_fn(success, target_id, owner_chat_id)
+    text, markup = views.render_share_panel(chat_id, list_name, panel_owner_id)
+    await bot.edit_message_text(
+        f"{note}\n\n{text}", chat_id=chat_id, message_id=panel_msg_id, reply_markup=markup, parse_mode="Markdown"
+    )
+
+
 async def _handle_share_invite(
     bot: Bot,
     msg: Message,
@@ -184,19 +215,12 @@ async def _handle_share_invite(
     prompt_msg_id: int,
 ) -> None:
     """Add a new share recipient by chat ID."""
-    list_name = state["list_name"]
-    owner_chat_id = db.resolve_list_owner(chat_id, list_name) or chat_id
-    guest_id = await _resolve_share_id(bot, msg, chat_id, list_name, owner_chat_id, user_text, panel_msg_id, prompt_msg_id)
-    if guest_id is None:
-        return
-    list_id = db.get_list_id(owner_chat_id, list_name)
-    if list_id and db.add_list_share(list_id, guest_id):
-        note = lang.t("confirm_invite_ok", chat_id=guest_id, list_name=list_name)
-    else:
-        note = lang.t("err_invite_failed", chat_id=guest_id)
-    text, markup = views.render_share_panel(chat_id, list_name, owner_chat_id)
-    await bot.edit_message_text(
-        f"{note}\n\n{text}", chat_id=chat_id, message_id=panel_msg_id, reply_markup=markup, parse_mode="Markdown"
+    await _handle_share_op(
+        bot, msg, state, chat_id, user_text, panel_msg_id, prompt_msg_id,
+        db_fn=db.add_list_share,
+        ok_note_fn=lambda t, n: lang.t("confirm_invite_ok", chat_id=t, list_name=n),
+        err_note_fn=lambda t: lang.t("err_invite_failed", chat_id=t),
+        panel_owner_fn=lambda _s, _t, owner: owner,
     )
 
 
@@ -210,19 +234,12 @@ async def _handle_share_remove(
     prompt_msg_id: int,
 ) -> None:
     """Remove a share recipient by chat ID."""
-    list_name = state["list_name"]
-    owner_chat_id = db.resolve_list_owner(chat_id, list_name) or chat_id
-    guest_id = await _resolve_share_id(bot, msg, chat_id, list_name, owner_chat_id, user_text, panel_msg_id, prompt_msg_id)
-    if guest_id is None:
-        return
-    list_id = db.get_list_id(owner_chat_id, list_name)
-    if list_id and db.remove_list_share(list_id, guest_id):
-        note = lang.t("confirm_remove_guest_ok", chat_id=guest_id, list_name=list_name)
-    else:
-        note = lang.t("err_remove_guest_failed", chat_id=guest_id)
-    text, markup = views.render_share_panel(chat_id, list_name, owner_chat_id)
-    await bot.edit_message_text(
-        f"{note}\n\n{text}", chat_id=chat_id, message_id=panel_msg_id, reply_markup=markup, parse_mode="Markdown"
+    await _handle_share_op(
+        bot, msg, state, chat_id, user_text, panel_msg_id, prompt_msg_id,
+        db_fn=db.remove_list_share,
+        ok_note_fn=lambda t, n: lang.t("confirm_remove_guest_ok", chat_id=t, list_name=n),
+        err_note_fn=lambda t: lang.t("err_remove_guest_failed", chat_id=t),
+        panel_owner_fn=lambda _s, _t, owner: owner,
     )
 
 
@@ -236,20 +253,13 @@ async def _handle_share_transfer(
     prompt_msg_id: int,
 ) -> None:
     """Transfer list ownership to another chat."""
-    list_name = state["list_name"]
-    owner_chat_id = db.resolve_list_owner(chat_id, list_name) or chat_id
-    new_owner_id = await _resolve_share_id(bot, msg, chat_id, list_name, owner_chat_id, user_text, panel_msg_id, prompt_msg_id)
-    if new_owner_id is None:
-        return
-    list_id = db.get_list_id(owner_chat_id, list_name)
-    if list_id and db.transfer_list_ownership(list_id, new_owner_id):
-        note = lang.t("confirm_transfer_ok", list_name=list_name, new_owner=new_owner_id)
-        text, markup = views.render_share_panel(chat_id, list_name, new_owner_id)
-    else:
-        note = lang.t("err_transfer_failed", chat_id=new_owner_id)
-        text, markup = views.render_share_panel(chat_id, list_name, owner_chat_id)
-    await bot.edit_message_text(
-        f"{note}\n\n{text}", chat_id=chat_id, message_id=panel_msg_id, reply_markup=markup, parse_mode="Markdown"
+    await _handle_share_op(
+        bot, msg, state, chat_id, user_text, panel_msg_id, prompt_msg_id,
+        db_fn=db.transfer_list_ownership,
+        ok_note_fn=lambda t, n: lang.t("confirm_transfer_ok", list_name=n, new_owner=t),
+        err_note_fn=lambda t: lang.t("err_transfer_failed", chat_id=t),
+        # on success render from new owner's perspective; on failure from old owner's
+        panel_owner_fn=lambda success, target, owner: target if success else owner,
     )
 
 
