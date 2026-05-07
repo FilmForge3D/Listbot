@@ -25,13 +25,8 @@ def main() -> None:
     lang.load_locale(args.lang)
     db.init_db()
     token = load_token()
-    # Create the Application
     application = Application.builder().token(token).build()
-
-    # Add handlers
     handlers.register_handlers(application)
-
-    # Start the Bot
     application.run_polling(allowed_updates=Update.ALL_TYPES)
 
 

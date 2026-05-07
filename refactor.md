@@ -272,9 +272,9 @@ Six `send_force_reply` calls in `callbacks.py` repeat the same five boilerplate 
 
 | File | Function | Verdict | Notes |
 |---|---|---|---|
-| [main.py:20](main.py#L20) | `main` | | |
+| [main.py:20](main.py#L20) | `main` | cleanup | Removed three expression-level comments that restated what the call names already say |
 
-- [ ] main.main
+- [x] main.main
 
 ---
 
