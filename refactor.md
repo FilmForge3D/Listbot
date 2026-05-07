@@ -304,14 +304,55 @@ Six `send_force_reply` calls in `callbacks.py` repeat the same five boilerplate 
 
 ---
 
-## Phase 9 - Preparation for release
+## Phase 9 — Preparation for release
 
-- [ ] Update README.md for a public release 
-- [ ] How to make the migration module private?
-- [ ] Release Version naming
-- [ ] Docker and Docker Compose check
-- [ ] Unraid XML
-- [ ] prepare public github release. RC first
+### Step 1 — Create `migration` branch (private, preserved)
+
+- [ ] `git checkout -b migration` from `Refactor`
+- [ ] Push to private repo — this branch never goes to the public repo
+
+### Step 2 — Strip `migration/` from `Refactor`
+
+- [ ] `git rm -r --cached migration/`
+- [ ] Add `migration/` to `.gitignore`
+- [ ] Commit: `chore: remove migration scripts from tracked files`
+
+### Step 3 — Release-prep content on `Refactor`
+
+- [ ] Add `LICENSE` (MIT)
+- [ ] Update `README.md` — contributing section, license badge
+- [ ] Fix `docker-compose.yml` — add `BOT_LANG` as commented example
+- [ ] Bump version to `1.0.0rc1` in `pyproject.toml`
+- [ ] Remove `refactor.md` from tracked files (dev artifact)
+
+### Step 4 — Merge `Refactor` → `main`
+
+- [ ] `git checkout main && git merge Refactor`
+- [ ] Clean up `Nachricht extrahieren/` (pre-refactor migration folder that survives the merge on `main`):
+  - [ ] `git rm -r --cached "Nachricht extrahieren/"`
+  - [ ] Add `Nachricht extrahieren/` to `.gitignore`
+  - [ ] Commit: `chore: remove pre-refactor migration scripts`
+
+### Step 5 — Delete `Refactor` branch
+
+- [ ] `git branch -d Refactor`
+- [ ] `git push origin --delete Refactor`
+
+### Step 6 — Create new public GitHub repo
+
+- [ ] Create new public repo on GitHub
+- [ ] `git remote add public <new-repo-url>`
+- [ ] `git push public main`
+
+### Step 7 — Tag and release
+
+- [ ] `git tag v1.0.0rc1`
+- [ ] `git push public v1.0.0rc1`
+- [ ] Create GitHub pre-release with release notes
+
+---
+
+_Unraid XML template deferred to post-RC._
 
 ---
 
