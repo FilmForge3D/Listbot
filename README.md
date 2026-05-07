@@ -5,6 +5,7 @@
 </p>
 
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](LICENSE)
+[![Docker](https://img.shields.io/badge/ghcr.io-listbot-blue?logo=docker)](https://github.com/FilmForge3D/Listbot/pkgs/container/listbot)
 
 A Telegram bot for managing named writing prompt lists in group chats. Browse, add, draw, and share lists via an inline keyboard UI — no commands needed for day-to-day use. Quick commands for interacting with a default list are available.
 
@@ -48,6 +49,14 @@ python main.py
 ```
 
 Requires Python 3.10+.
+
+### Run with Docker
+
+A pre-built image is published to the [GitHub Container Registry](https://github.com/FilmForge3D/Listbot/pkgs/container/listbot):
+
+```bash
+docker pull ghcr.io/filmforge3d/listbot:latest
+```
 
 ### Run with Docker Compose
 
