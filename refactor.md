@@ -282,11 +282,16 @@ Six `send_force_reply` calls in `callbacks.py` repeat the same five boilerplate 
 
 | File | Function | Verdict | Notes |
 |---|---|---|---|
-| [tests/test_db_smoke.py:8](tests/test_db_smoke.py#L8) | `tmp_db` | | fixture |
-| [tests/test_db_smoke.py:14](tests/test_db_smoke.py#L14) | `test_prompt_round_trip` | | expand coverage? separate decision |
+| [tests/test_db_smoke.py:8](tests/test_db_smoke.py#L8) | `tmp_db` | keep | Clean fixture; no changes needed |
+| [tests/test_db_smoke.py:14](tests/test_db_smoke.py#L14) | `test_prompt_round_trip` | keep | Already covers core round-trip |
+| [tests/test_db_smoke.py](tests/test_db_smoke.py) | `test_users` | new | Covers `upsert_user` + `lookup_name` |
+| [tests/test_db_smoke.py](tests/test_db_smoke.py) | `test_settings` | new | Covers `get_default_list` + `set_default_list` |
+| [tests/test_db_smoke.py](tests/test_db_smoke.py) | `test_list_rename_and_id` | new | Covers `rename_list` + `get_list_id` |
+| [tests/test_db_smoke.py](tests/test_db_smoke.py) | `test_prompt_extras` | new | Covers `edit_prompt`, `get_stats`, `get_recently_drawn_prompts` |
+| [tests/test_db_smoke.py](tests/test_db_smoke.py) | `test_shares` | new | Covers all 6 share functions |
 
-- [ ] tests.test_db_smoke.tmp_db
-- [ ] tests.test_db_smoke.test_prompt_round_trip
+- [x] tests.test_db_smoke.tmp_db
+- [x] tests.test_db_smoke.test_prompt_round_trip
 
 ---
 
