@@ -238,8 +238,13 @@ Also fixed `lang.t("btn_db.delete_list")` key typo → `lang.t("btn_delete_list"
 |---|---|---|---|
 | [handlers/__init__.py:21](handlers/__init__.py#L21) | `register_handlers` | keep | Added `__all__ = ["register_handlers"]`; function itself was already clean |
 | [ui/__init__.py:3](ui/__init__.py#L3) | _(module)_ | cleanup | Was empty; added re-exports of `render_lists_view`, `render_list_view`, `render_share_panel` + `__all__` |
+| [i18n/__init__.py:1](i18n/__init__.py#L1) | _(module)_ | cleanup | Moved `__all__` above imports to match convention |
+| [db/__init__.py:24](db/__init__.py#L24) | _(module)_ | cleanup | Sorted `__all__` alphabetically |
 
 - [x] handlers.__init__.register_handlers
+- [x] ui.__init__
+- [x] i18n.__init__
+- [x] db.__init__
 
 ---
 
