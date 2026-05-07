@@ -246,6 +246,26 @@ Also fixed `lang.t("btn_db.delete_list")` key typo → `lang.t("btn_delete_list"
 - [x] i18n.__init__
 - [x] db.__init__
 
+### 5e — `_prompt_reply` helper
+
+Six `send_force_reply` calls in `callbacks.py` repeat the same five boilerplate args (`context`, `chat_id`, `thread_id`, `message_id`, `from_user`). Extract a local `_prompt_reply` helper that pre-binds them.
+
+| File | Function | Verdict | Notes |
+|---|---|---|---|
+| [handlers/callbacks.py](handlers/callbacks.py) | `_prompt_reply` | new | Pre-binds the 5 boilerplate args to `send_force_reply`; used by `_handle_remove_prompt`, `_handle_edit_prompt`, `_handle_add_prompt`, `_handle_share_invite`, `_handle_share_remove`, `_handle_share_transfer`, `_handle_new_list` |
+
+- [x] handlers.callbacks._prompt_reply
+
+### 5f — Unify share operation handlers
+
+`_handle_share_invite`, `_handle_share_remove`, and `_handle_share_transfer` in `replies.py` share ~80 % identical structure: resolve owner → `_resolve_share_id` → get `list_id` → call db fn → build note → render share panel → edit message. Extract a `_handle_share_op` scaffold that accepts the varying parts.
+
+| File | Function | Verdict | Notes |
+|---|---|---|---|
+| [handlers/replies.py](handlers/replies.py) | `_handle_share_op` | new | Common scaffold for all three share operations; transfer diverges on panel render (new owner vs. old owner) — handle as a special-case arg |
+
+- [ ] handlers.replies._handle_share_op
+
 ---
 
 ## Phase 6 — Entry point

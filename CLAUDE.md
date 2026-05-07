@@ -210,6 +210,9 @@ python migration/extract_telegram.py input.json --bot-name "MyBot" --output-json
 - **One function per edit**: Only modify one function per Edit tool call
 - **Rationale**: Keeps changes focused, reviewable, and debuggable
 
+### Refactoring
+- **Stick to the Plan**: There will always be a `refactor.md` file guiding any refactoring work. If the user asks for refactoring and no such file exists, ask for confirmation to create one. A single function may be refactored without a written plan.
+
 ### Examples
 
 ✅ **Good**: Adding a single helper function for list validation (45 lines)

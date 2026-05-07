@@ -12,6 +12,29 @@ from ui import views
 PAGE_SIZE = 50
 
 
+async def _prompt_reply(
+    query: CallbackQuery,
+    context: ContextTypes.DEFAULT_TYPE,
+    chat_id: int,
+    action: str,
+    body: str,
+    bold_text: str = "",
+    list_name: str | None = None,
+) -> None:
+    """Send a ForceReply with the query's boilerplate args pre-bound."""
+    await send_force_reply(
+        context,
+        chat_id,
+        query.message.message_thread_id,
+        query.message.message_id,
+        query.from_user,
+        action,
+        body,
+        bold_text,
+        list_name,
+    )
+
+
 async def _handle_back(query: CallbackQuery, chat_id: int, chat_title: str) -> None:
     """Navigate back to the lists overview."""
     text, markup = views.render_lists_view(chat_id, chat_title)
@@ -116,49 +139,19 @@ async def _handle_remove_prompt(query: CallbackQuery, chat_id: int, data: str, c
             lang.t("confirm_delete_prompt", list_name=list_name), reply_markup=markup, parse_mode="Markdown"
         )
         return
-    await send_force_reply(
-        context,
-        chat_id,
-        query.message.message_thread_id,
-        query.message.message_id,
-        query.from_user,
-        "remove",
-        lang.t("fr_remove_body", list_name=list_name),
-        list_name,
-        list_name=list_name,
-    )
+    await _prompt_reply(query, context, chat_id, "remove", lang.t("fr_remove_body", list_name=list_name), list_name, list_name)
 
 
 async def _handle_edit_prompt(query: CallbackQuery, chat_id: int, data: str, context: ContextTypes.DEFAULT_TYPE) -> None:
     """Open a ForceReply prompt to edit a prompt or rename the list."""
     list_name = data[5:]
-    await send_force_reply(
-        context,
-        chat_id,
-        query.message.message_thread_id,
-        query.message.message_id,
-        query.from_user,
-        "edit",
-        lang.t("fr_edit_body", list_name=list_name),
-        list_name,
-        list_name=list_name,
-    )
+    await _prompt_reply(query, context, chat_id, "edit", lang.t("fr_edit_body", list_name=list_name), list_name, list_name)
 
 
 async def _handle_add_prompt(query: CallbackQuery, chat_id: int, data: str, context: ContextTypes.DEFAULT_TYPE) -> None:
     """Open a ForceReply prompt to add a new prompt."""
     list_name = data[4:]
-    await send_force_reply(
-        context,
-        chat_id,
-        query.message.message_thread_id,
-        query.message.message_id,
-        query.from_user,
-        "add",
-        lang.t("fr_add_body", list_name=list_name),
-        list_name,
-        list_name=list_name,
-    )
+    await _prompt_reply(query, context, chat_id, "add", lang.t("fr_add_body", list_name=list_name), list_name, list_name)
 
 
 async def _handle_set_default(query: CallbackQuery, chat_id: int, data: str) -> None:
@@ -192,49 +185,19 @@ async def _handle_share_panel(query: CallbackQuery, chat_id: int, data: str) -> 
 async def _handle_share_invite(query: CallbackQuery, chat_id: int, data: str, context: ContextTypes.DEFAULT_TYPE) -> None:
     """Open a ForceReply prompt to invite a chat to the list."""
     list_name = data[13:]
-    await send_force_reply(
-        context,
-        chat_id,
-        query.message.message_thread_id,
-        query.message.message_id,
-        query.from_user,
-        "share_invite",
-        lang.t("fr_invite_body", chat_id=chat_id, list_name=list_name),
-        list_name,
-        list_name=list_name,
-    )
+    await _prompt_reply(query, context, chat_id, "share_invite", lang.t("fr_invite_body", chat_id=chat_id, list_name=list_name), list_name, list_name)
 
 
 async def _handle_share_remove(query: CallbackQuery, chat_id: int, data: str, context: ContextTypes.DEFAULT_TYPE) -> None:
     """Open a ForceReply prompt to remove a chat from the list."""
     list_name = data[13:]
-    await send_force_reply(
-        context,
-        chat_id,
-        query.message.message_thread_id,
-        query.message.message_id,
-        query.from_user,
-        "share_remove",
-        lang.t("fr_remove_guest_body", list_name=list_name),
-        list_name,
-        list_name=list_name,
-    )
+    await _prompt_reply(query, context, chat_id, "share_remove", lang.t("fr_remove_guest_body", list_name=list_name), list_name, list_name)
 
 
 async def _handle_share_transfer(query: CallbackQuery, chat_id: int, data: str, context: ContextTypes.DEFAULT_TYPE) -> None:
     """Open a ForceReply prompt to transfer list ownership."""
     list_name = data[15:]
-    await send_force_reply(
-        context,
-        chat_id,
-        query.message.message_thread_id,
-        query.message.message_id,
-        query.from_user,
-        "share_transfer",
-        lang.t("fr_transfer_body", list_name=list_name),
-        list_name,
-        list_name=list_name,
-    )
+    await _prompt_reply(query, context, chat_id, "share_transfer", lang.t("fr_transfer_body", list_name=list_name), list_name, list_name)
 
 
 async def _handle_share_leave(query: CallbackQuery, chat_id: int, data: str, chat_title: str) -> None:
@@ -251,15 +214,7 @@ async def _handle_share_leave(query: CallbackQuery, chat_id: int, data: str, cha
 
 async def _handle_new_list(query: CallbackQuery, chat_id: int, context: ContextTypes.DEFAULT_TYPE) -> None:
     """Open a ForceReply prompt to create a new list."""
-    await send_force_reply(
-        context,
-        chat_id,
-        query.message.message_thread_id,
-        query.message.message_id,
-        query.from_user,
-        "new_list",
-        lang.t("fr_new_list_body"),
-    )
+    await _prompt_reply(query, context, chat_id, "new_list", lang.t("fr_new_list_body"))
 
 
 async def button_handler(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
