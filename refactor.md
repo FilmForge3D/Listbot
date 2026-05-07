@@ -2,7 +2,7 @@
 
 A function-by-function pass over the bot codebase. Walk through this at your own pace; each step is a discrete unit of work with its own commit.
 
-**Out of scope:** `migration/` (moving to private branch — leave messy).
+**Out of scope:** `migration/` (preserved on a public stale `migration` branch — leave messy).
 
 ---
 
@@ -306,13 +306,14 @@ Six `send_force_reply` calls in `callbacks.py` repeat the same five boilerplate 
 
 ## Phase 9 — Preparation for release
 
-### Step 1 — Create `migration` branch (private, preserved)
+### Step 1 — Create `migration` branch (public, stale)
 
 - [ ] `git checkout -b migration` from `Refactor`
-- [ ] Push to private repo — this branch never goes to the public repo
+- [ ] Push to origin — this branch is public and stale; no further commits expected
 
 ### Step 2 — Strip `migration/` from `Refactor`
 
+- [ ] `git checkout Refactor`
 - [ ] `git rm -r --cached migration/`
 - [ ] Add `migration/` to `.gitignore`
 - [ ] Commit: `chore: remove migration scripts from tracked files`
@@ -338,16 +339,15 @@ Six `send_force_reply` calls in `callbacks.py` repeat the same five boilerplate 
 - [ ] `git branch -d Refactor`
 - [ ] `git push origin --delete Refactor`
 
-### Step 6 — Create new public GitHub repo
+### Step 6 — Make the repo public
 
-- [ ] Create new public repo on GitHub
-- [ ] `git remote add public <new-repo-url>`
-- [ ] `git push public main`
+- [ ] Verify `.gitignore` covers all personal data (token.txt, .env, data/)
+- [ ] Go to GitHub repo Settings → Danger Zone → Change visibility → Public
 
 ### Step 7 — Tag and release
 
 - [ ] `git tag v1.0.0rc1`
-- [ ] `git push public v1.0.0rc1`
+- [ ] `git push origin v1.0.0rc1`
 - [ ] Create GitHub pre-release with release notes
 
 ---
