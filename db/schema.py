@@ -26,15 +26,18 @@ def init_db() -> None:
         """)
         conn.execute("""
             CREATE TABLE IF NOT EXISTS prompts (
-                id           INTEGER PRIMARY KEY AUTOINCREMENT,
-                list_id      INTEGER NOT NULL REFERENCES lists(id) ON DELETE CASCADE,
-                position     INTEGER NOT NULL,
-                text         TEXT    NOT NULL,
-                drawn        INTEGER NOT NULL DEFAULT 0,
-                drawn_at     TEXT,
-                added_by_id  INTEGER REFERENCES users(user_id),
-                added_at     TEXT    NOT NULL DEFAULT (datetime('now')),
-                UNIQUE (list_id, position)
+                id            INTEGER PRIMARY KEY AUTOINCREMENT,
+                list_id       INTEGER NOT NULL REFERENCES lists(id) ON DELETE CASCADE,
+                position      INTEGER NOT NULL,
+                text          TEXT,
+                media_file_id TEXT,
+                media_type    TEXT,
+                drawn         INTEGER NOT NULL DEFAULT 0,
+                drawn_at      TEXT,
+                added_by_id   INTEGER REFERENCES users(user_id),
+                added_at      TEXT    NOT NULL DEFAULT (datetime('now')),
+                UNIQUE (list_id, position),
+                CHECK (text IS NOT NULL OR media_file_id IS NOT NULL)
             )
         """)
         conn.execute("""

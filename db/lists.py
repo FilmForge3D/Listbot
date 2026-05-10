@@ -19,6 +19,12 @@ def _get_or_create_list(conn: sqlite3.Connection, chat_id: int, list_name: str) 
     return cur.lastrowid
 
 
+def create_list(chat_id: int, list_name: str) -> int:
+    """Create a list if it doesn't exist and return its id."""
+    with get_connection() as conn:
+        return _get_or_create_list(conn, chat_id, list_name)
+
+
 def get_list_id(chat_id: int, list_name: str) -> int | None:
     """Return the id for a named list, or None if it does not exist."""
     with get_connection() as conn:

@@ -1,6 +1,9 @@
+import asyncio
+
 from telegram import CallbackQuery, InlineKeyboardButton, InlineKeyboardMarkup, Update
-from telegram.error import TimedOut
+from telegram.error import BadRequest, RetryAfter, TimedOut
 from telegram.ext import ContextTypes
+from telegram.helpers import escape_markdown
 
 import db
 import i18n as lang
@@ -10,6 +13,15 @@ from text import first_name
 from ui import views
 
 PAGE_SIZE = 50
+
+
+async def _safe_edit(query: CallbackQuery, text: str, markup: InlineKeyboardMarkup) -> None:
+    """Edit message text, silently ignoring no-op edits."""
+    try:
+        await query.edit_message_text(text, reply_markup=markup, parse_mode="Markdown")
+    except BadRequest as e:
+        if "not modified" not in str(e).lower():
+            raise
 
 
 async def _prompt_reply(
@@ -74,10 +86,10 @@ async def _handle_list_page(query: CallbackQuery, chat_id: int, data: str) -> No
     drawn = sum(1 for p in prompts if p["drawn"])
     start = page * PAGE_SIZE
     page_prompts = prompts[start : start + PAGE_SIZE]
-    lines = "\n".join(f"{p['position']}. {p['text']}" for p in page_prompts) or lang.t("panel_empty")
+    lines = "\n".join(f"{p['position']}. {escape_markdown(p['text'])}" for p in page_prompts) or lang.t("panel_empty")
     total_pages = max(1, (total + PAGE_SIZE - 1) // PAGE_SIZE)
     paged = lang.t("panel_list_header_paged", total=total, drawn=drawn, page=page + 1, total_pages=total_pages)
-    text = f"*{list_name}*  {paged}\n\n{lines}"
+    text = f"*{escape_markdown(list_name)}*  {paged}\n\n{lines}"
     _, base_markup = views.render_list_view(owner_chat_id, list_name)
     if total_pages > 1:
         prev_page = (page - 1) % total_pages
@@ -89,7 +101,11 @@ async def _handle_list_page(query: CallbackQuery, chat_id: int, data: str) -> No
         markup = InlineKeyboardMarkup(list(base_markup.inline_keyboard) + [nav_row])
     else:
         markup = base_markup
-    await query.edit_message_text(text, reply_markup=markup, parse_mode="Markdown")
+    try:
+        await _safe_edit(query, text, markup)
+    except RetryAfter as e:
+        await asyncio.sleep(e.retry_after)
+        await _safe_edit(query, text, markup)
 
 
 async def _handle_stats(query: CallbackQuery, chat_id: int, data: str) -> None:
@@ -251,7 +267,7 @@ async def button_handler(update: Update, context: ContextTypes.DEFAULT_TYPE) -> 
         return
     try:
         await query.answer()
-    except TimedOut:
+    except (TimedOut, BadRequest):
         pass
     data = query.data
     if data is None:

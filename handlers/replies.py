@@ -76,6 +76,7 @@ async def _handle_new_list(
 ) -> None:
     """Create a new list with the given name."""
     list_name = user_text
+    db.create_list(chat_id, list_name)
     text, markup = views.render_list_view(chat_id, list_name, lang.t("confirm_list_created"))
     await cleanup_reply_messages(bot, chat_id, prompt_msg_id, msg.message_id)
     await bot.edit_message_text(
