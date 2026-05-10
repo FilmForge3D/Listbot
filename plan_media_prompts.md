@@ -1,6 +1,6 @@
 # Plan: Media/File Prompt Support
 
-## DB changes (v1.0 — schema only)
+## DB changes (v1.0 — schema only) ✓
 
 **`db/schema.py`** — recreate `prompts` table with:
 - `text TEXT` → nullable (was `NOT NULL`)
