@@ -101,7 +101,7 @@ def import_json(json_path: Path, db_path: Path) -> None:
 
 def main() -> None:
     parser = argparse.ArgumentParser(description="Import ergebnis.json into the ListBot SQLite database")
-    parser.add_argument("input", nargs="?", default="ergebnis.json", help="Path to ergebnis.json")
+    parser.add_argument("input", nargs="?", default=str(Path(__file__).parent / "ergebnis.json"), help="Path to ergebnis.json (default: ergebnis.json in script folder)")
     parser.add_argument("--db", default=str(_DEFAULT_DB), help="Path to SQLite database file")
     args = parser.parse_args()
 

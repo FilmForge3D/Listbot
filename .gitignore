@@ -225,3 +225,6 @@ token.txt
 *.db
 *.code-workspace
 .claude/
+
+/migration/photos
+/migration/prompt_images

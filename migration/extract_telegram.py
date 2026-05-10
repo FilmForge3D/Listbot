@@ -8,10 +8,13 @@ Extrahiert aus einem Telegram-Gruppenexport (result.json):
 import argparse
 import json
 import re
+import shutil
 from collections import Counter
 from difflib import get_close_matches
 from pathlib import Path
 from typing import Any, cast
+
+_SCRIPT_DIR = Path(__file__).parent
 
 # Muster für relevante ListBot-Nachrichten
 LISTBOT_PATTERNS = [
@@ -109,9 +112,9 @@ _LISTBOT_ENTRY_PATTERNS: list[tuple[re.Pattern, int | None, int]] = [
     (re.compile(r"^(\w+)\s+successfully added '(.+?)'\s+in position", re.IGNORECASE), 1, 2),
     (re.compile(r"^Successfully added '(.+?)'\s+in position", re.IGNORECASE), None, 1),
     (re.compile(r"^Successfully added '(.+?)' to the list", re.IGNORECASE), None, 1),
-    (re.compile(r"^✅ (\w+) added \d+: '(.+?)'"), 1, 2),
-    (re.compile(r"^(\w+)\s+successfully changed position \d+ from '.+?' into '(.+?)'", re.IGNORECASE), 1, 2),
-    (re.compile(r"^✅ (\w+) changed \d+ from '.+?' to '(.+?)'"), 1, 2),
+    (re.compile(r"^✅ (\w+) added \d+: '(.+?)'(?!\w)"), 1, 2),
+    (re.compile(r"^(\w+)\s+successfully changed position \d+ from '.+?'(?!\w) into '(.+?)'(?!\w)", re.IGNORECASE), 1, 2),
+    (re.compile(r"^✅ (\w+) changed \d+ from '.+?'(?!\w) to '(.+?)'(?!\w)"), 1, 2),
 ]
 
 
@@ -178,17 +181,18 @@ def normalize_prompts(result: dict) -> dict:
             continue
         full_name = msg["from"]
         fname = full_name.split()[0]
-        prompts.append(
-            {
-                "date": msg["date"],
-                "first_name": fname,
-                "user_id": user_lookup.get(full_name) or user_lookup.get(fname) or "",
-                "prompt": prompt,
-                "list_number": list_number,
-                "draw_count": draw_counts.get(prompt.strip().lower(), 0),
-                "last_drawn": last_drawn.get(prompt.strip().lower()),
-            }
-        )
+        entry: dict = {
+            "date": msg["date"],
+            "first_name": fname,
+            "user_id": user_lookup.get(full_name) or user_lookup.get(fname) or "",
+            "prompt": prompt,
+            "list_number": list_number,
+            "draw_count": draw_counts.get(prompt.strip().lower(), 0),
+            "last_drawn": last_drawn.get(prompt.strip().lower()),
+        }
+        if msg.get("image_path"):
+            entry["image_path"] = msg["image_path"]
+        prompts.append(entry)
 
     for msg in result["listbot"]:
         if msg["match_type"] not in {"added", "gruppt", "edited"}:
@@ -248,7 +252,23 @@ def extract_messages(input_path: Path, bot_name: str = "ListBot") -> dict:
             if match_type:
                 listbot_msgs.append({**entry, "match_type": match_type})
 
-        if text.startswith("/"):
+        is_add_cmd = (
+            text.strip().startswith("/")
+            and text.strip().split()[0].lstrip("/").split("@")[0].rstrip("23") in _ADD_CMD_BASES
+        )
+        media = msg.get("photo", "") or msg.get("file", "")
+        if media and is_add_cmd:
+            src = input_path.parent / media
+            dest_dir = input_path.parent / "prompt_images"
+            dest_dir.mkdir(exist_ok=True)
+            filename = Path(media).name
+            dest = dest_dir / filename
+            if src.exists():
+                shutil.copy2(src, dest)
+            cmd_token = text.strip().split()[0]
+            entry_text = text if len(text.split()) > 1 else f"{cmd_token} {filename}"
+            slash_msgs.append({**entry, "text": entry_text, "image_path": str(dest)})
+        elif text.startswith("/"):
             slash_msgs.append(entry)
 
     # Deduplizierung: ListBot added/gruppt/edited-Nachrichten entfernen,
@@ -327,8 +347,8 @@ def main():
     parser.add_argument(
         "input",
         nargs="?",
-        default="result.json",
-        help="Pfad zur result.json (Standard: result.json)",
+        default=str(_SCRIPT_DIR / "result.json"),
+        help="Pfad zur result.json (Standard: result.json im Script-Ordner)",
     )
     parser.add_argument(
         "--bot-name",
@@ -338,7 +358,8 @@ def main():
     parser.add_argument(
         "--output-json",
         metavar="FILE",
-        help="Ergebnis zusätzlich als JSON speichern",
+        default=str(_SCRIPT_DIR / "ergebnis.json"),
+        help="Ergebnis als JSON speichern (Standard: ergebnis.json im Script-Ordner)",
     )
     parser.add_argument(
         "--quiet",
@@ -374,11 +395,10 @@ def main():
         for name, count in user_counts.most_common():
             print(f"  {name:<20}: {count}")
 
-    if args.output_json:
-        out = Path(args.output_json)
-        with open(out, "w", encoding="utf-8") as f:
-            json.dump(normalized, f, ensure_ascii=False, indent=2)
-        print(f"\n  Gespeichert als: {out}")
+    out = Path(args.output_json)
+    with open(out, "w", encoding="utf-8") as f:
+        json.dump(normalized, f, ensure_ascii=False, indent=2)
+    print(f"\n  Gespeichert als: {out}")
 
 
 if __name__ == "__main__":
