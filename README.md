@@ -44,7 +44,7 @@ BOT_TOKEN=your_token_here
 ### Run directly
 
 ```bash
-pip install -r requirements.txt
+pip install .
 python main.py
 ```
 
