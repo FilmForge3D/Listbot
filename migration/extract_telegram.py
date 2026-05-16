@@ -267,7 +267,7 @@ def extract_messages(input_path: Path, bot_name: str = "ListBot") -> dict:
                 shutil.copy2(src, dest)
             cmd_token = text.strip().split()[0]
             entry_text = text if len(text.split()) > 1 else f"{cmd_token} {filename}"
-            slash_msgs.append({**entry, "text": entry_text, "image_path": str(dest)})
+            slash_msgs.append({**entry, "text": entry_text, "image_path": f"media/{filename}"})
         elif text.startswith("/"):
             slash_msgs.append(entry)
 
