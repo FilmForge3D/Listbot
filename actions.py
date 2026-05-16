@@ -16,7 +16,7 @@ async def do_draw(
     added_by = first_name(prompt["added_by_name"]) if prompt["added_by_name"] else ""
     author_line = lang.t("notify_drew_author", added_by=added_by) if added_by else ""
     msg = lang.t(
-        "notify_drew", user=first_name(user_name), list_name=list_name, text=prompt["text"], author_line=author_line
+        "notify_drew", user=first_name(user_name), list_name=list_name, text=prompt["text"] or "[media]", author_line=author_line
     )
     await notify(bot, notify_chat_id if notify_chat_id is not None else chat_id, msg, thread_id)
     return True

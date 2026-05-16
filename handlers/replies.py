@@ -57,7 +57,7 @@ async def _handle_remove(
     position = int(user_text)
     removed = db.remove_prompt(owner_chat_id, list_name, position)
     note = (
-        lang.t("notify_removed", position=position, text=removed["text"])
+        lang.t("notify_removed", position=position, text=removed["text"] or "[media]")
         if removed
         else lang.t("err_no_item_at", position=position)
     )
