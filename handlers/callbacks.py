@@ -86,7 +86,7 @@ async def _handle_list_page(query: CallbackQuery, chat_id: int, data: str) -> No
     drawn = sum(1 for p in prompts if p["drawn"])
     start = page * PAGE_SIZE
     page_prompts = prompts[start : start + PAGE_SIZE]
-    lines = "\n".join(f"{p['position']}. {escape_markdown(p['text'])}" for p in page_prompts) or lang.t("panel_empty")
+    lines = "\n".join(f"{p['position']}. {escape_markdown(p['text'] or '[media]')}" for p in page_prompts) or lang.t("panel_empty")
     total_pages = max(1, (total + PAGE_SIZE - 1) // PAGE_SIZE)
     paged = lang.t("panel_list_header_paged", total=total, drawn=drawn, page=page + 1, total_pages=total_pages)
     text = f"*{escape_markdown(list_name)}*  {paged}\n\n{lines}"
@@ -120,7 +120,7 @@ async def _handle_stats(query: CallbackQuery, chat_id: int, data: str) -> None:
         lang.t("stats_user_line", name=first_name(r["name"]), count=r["count"]) for r in s["by_user"]
     )
     most = (
-        lang.t("stats_most_drawn_fmt", text=s["most_drawn"]["text"], count=s["most_drawn"]["count"])
+        lang.t("stats_most_drawn_fmt", text=s["most_drawn"]["text"] or "[media]", count=s["most_drawn"]["count"])
         if s["most_drawn"]
         else lang.t("stats_most_drawn_none")
     )

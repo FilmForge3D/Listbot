@@ -32,7 +32,7 @@ def render_list_view(chat_id: int, list_name: str, note: str = "") -> tuple[str,
     header = f"*{list_name}*  {lang.t('panel_list_header', total=total, drawn=drawn)}"
     recent = db.get_recently_drawn_prompts(chat_id, list_name)
     if recent:
-        lines = "\n".join(f"• {p['text']}" for p in recent)
+        lines = "\n".join(f"• {p['text'] or '[media]'}" for p in recent)
         recent_section = f"\n\n*{lang.t('panel_recent_header')}*\n{lines}"
     else:
         recent_section = ""
