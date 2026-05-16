@@ -8,7 +8,8 @@ from pathlib import Path
 
 _ROOT = Path(__file__).parent.parent
 sys.path.insert(0, str(_ROOT))
-import db.database as database  # noqa: E402
+import db
+import db.connection as _db_conn
 
 _DEFAULT_DB = Path(__file__).parent / "listbot.db"
 
@@ -37,12 +38,12 @@ def import_json(json_path: Path, db_path: Path) -> None:
     prompts: list[dict] = data["prompts"]
     user_lookup: dict[str, str] = data.get("user_lookup", {})
 
-    database.DB_PATH = db_path
-    database.init_db()
+    _db_conn.DB_PATH = db_path
+    db.init_db()
 
     id_to_name, name_to_id = _build_user_maps(user_lookup)
 
-    with database.get_connection() as conn:
+    with db.get_connection() as conn:
         for uid, name in id_to_name.items():
             conn.execute(
                 "INSERT INTO users (user_id, name) VALUES (?, ?)"
@@ -80,13 +81,21 @@ def import_json(json_path: Path, db_path: Path) -> None:
             uid_str = p.get("user_id") or user_lookup.get(p.get("first_name", ""), "")
             added_by_id: int | None = int(uid_str) if uid_str else name_to_id.get(p.get("first_name", ""))
 
+            image_path: str | None = p.get("image_path")
+            media_file_id: str | None = image_path
+            media_type: str | None = "photo" if image_path else None
+            raw_text = p["prompt"]
+            # Pure photo (no caption): filename == prompt text → store NULL
+            is_caption = not image_path or Path(image_path).name != raw_text
+            text: str | None = raw_text if is_caption else None
+
             pos = position_counters[list_num]
             position_counters[list_num] += 1
             conn.execute(
                 """INSERT OR REPLACE INTO prompts
-                   (list_id, position, text, drawn, drawn_at, added_by_id, added_at)
-                   VALUES (?, ?, ?, ?, ?, ?, ?)""",
-                (list_id, pos, p["prompt"], p.get("draw_count", 0), p.get("last_drawn"), added_by_id, p.get("date")),
+                   (list_id, position, text, media_file_id, media_type, drawn, drawn_at, added_by_id, added_at)
+                   VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)""",
+                (list_id, pos, text, media_file_id, media_type, p.get("draw_count", 0), p.get("last_drawn"), added_by_id, p.get("date")),
             )
             inserted += 1
 
